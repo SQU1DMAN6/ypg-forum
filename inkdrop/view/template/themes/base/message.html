@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/assets/root.css" />
+    <title>FtR</title>
+</head>
+<body>
+    <main class="page">
+        {{block "content" .}}
+        <section class="shell narrow">
+            <div class="panel auth-card">
+                <p>Could not render the main content block.</p>
+            </div>
+        </section>
+        {{end}}
+    </main>
+    <script>
+        (function () {
+            var savedTheme = localStorage.getItem("inkdrop-theme");
+            document.documentElement.setAttribute("data-theme", savedTheme === "dark" ? "dark" : "light");
+        })();
+    </script>
+</body>
+</html>

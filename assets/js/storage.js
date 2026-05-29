@@ -10,6 +10,10 @@
     conversations: `${prefix}conversations`,
     comments: `${prefix}comments`
   };
+  const api = window.YPGApi;
+  let backendAvailable = false;
+  let sessionUserId = window.YPG_DATA.currentUserId;
+  let readyPromise = null;
 
   function read(key, fallback) {
     try {
@@ -24,6 +28,39 @@
     localStorage.setItem(key, JSON.stringify(value));
   }
 
+  function persist(path, payload) {
+    if (!backendAvailable || !api || typeof path !== "function") return;
+    path(payload).catch(() => {
+      backendAvailable = false;
+    });
+  }
+
+  function hydrateFromBackend(state, userId) {
+    if (!state) return;
+    sessionUserId = userId || sessionUserId;
+    if (Array.isArray(state.posts)) write(keys.posts, state.posts);
+    if (state.comments) write(keys.comments, state.comments);
+    if (state.votes) write(keys.votes, state.votes);
+    if (state.profiles && state.profiles[sessionUserId]) write(keys.profile, state.profiles[sessionUserId]);
+    if (state.settings && state.settings[sessionUserId]) write(keys.settings, state.settings[sessionUserId]);
+    if (state.follows && state.follows[sessionUserId]) write(keys.follows, state.follows[sessionUserId]);
+    if (Array.isArray(state.conversations) && state.conversations.length) write(keys.conversations, state.conversations);
+  }
+
+  async function ready() {
+    if (readyPromise) return readyPromise;
+    readyPromise = api ? api.session()
+      .then((session) => {
+        backendAvailable = true;
+        hydrateFromBackend(session.state, session.userId);
+        write(keys.auth, { signedIn: session.signedIn !== false, backend: true });
+      })
+      .catch(() => {
+        backendAvailable = false;
+      }) : Promise.resolve();
+    return readyPromise;
+  }
+
   function customPosts() {
     return read(keys.posts, []);
   }
@@ -36,17 +73,27 @@
     return auth().signedIn !== false;
   }
 
-  function loginDemo() {
+  function loginDemo(credentials = {}) {
+    if (api) {
+      return api.login(credentials).then((session) => {
+        write(keys.auth, { ...auth(), signedIn: true });
+        return session;
+      });
+    }
     write(keys.auth, { ...auth(), signedIn: true });
+    return Promise.resolve();
   }
 
   function logoutDemo() {
     write(keys.auth, { ...auth(), signedIn: false });
+    if (api) api.logout().catch(() => {});
   }
 
   function signupLocal(account) {
+    if (api) return api.signup(account);
     write(keys.auth, { signedIn: true, localAccount: account });
     saveProfile(account);
+    return Promise.resolve();
   }
 
   function allPosts() {
@@ -57,6 +104,7 @@
     const posts = customPosts();
     posts.unshift(post);
     write(keys.posts, posts);
+    persist(api?.createPost, post);
   }
 
   function postById(postId) {
@@ -78,6 +126,7 @@
       ? follows().filter((id) => id !== userId)
       : [...follows(), userId];
     write(keys.follows, next);
+    persist(api?.toggleFollow, userId);
     return next;
   }
 
@@ -112,6 +161,7 @@
       };
     }
     write(keys.votes, next);
+    if (api) api.toggleVote(postId, direction).catch(() => {});
   }
 
   function comments() {
@@ -126,6 +176,7 @@
     const next = comments();
     next[postId] = [...(next[postId] || []), { parentId: null, ...comment }];
     write(keys.comments, next);
+    if (api) api.addComment(postId, comment).catch(() => {});
     return next[postId];
   }
 
@@ -156,6 +207,7 @@
   function saveProfile(updates) {
     const next = { ...profile(), ...updates };
     write(keys.profile, next);
+    persist(api?.saveProfile, next);
     return next;
   }
 
@@ -166,6 +218,7 @@
   function saveSettings(updates) {
     const next = { ...settings(), ...updates };
     write(keys.settings, next);
+    persist(api?.saveSettings, next);
     return next;
   }
 
@@ -176,6 +229,32 @@
 
   function saveConversations(next) {
     write(keys.conversations, next);
+    persist(api?.saveConversations, next);
+  }
+
+  function sendMessage(userId, body) {
+    const currentUserId = window.YPG_DATA.currentUserId;
+    const all = conversations();
+    let conversation = all.find((item) => item.participantIds.includes(userId) && item.participantIds.includes(currentUserId));
+    if (!conversation) {
+      conversation = {
+        id: `chat-${userId}`,
+        participantIds: [currentUserId, userId],
+        unread: false,
+        messages: []
+      };
+      all.unshift(conversation);
+    }
+    conversation.messages.push({
+      id: `msg-${Date.now()}`,
+      senderId: currentUserId,
+      body,
+      timestamp: "Just now",
+      read: true
+    });
+    conversation.unread = false;
+    saveConversations(all);
+    return conversation;
   }
 
   function conversationWith(userId) {
@@ -212,6 +291,7 @@
   }
 
   window.YPGStore = {
+    ready,
     auth,
     isSignedIn,
     loginDemo,
@@ -237,6 +317,7 @@
     saveSettings,
     conversations,
     conversationWith,
+    sendMessage,
     resetLocalDemoData,
     exportLocalData
   };

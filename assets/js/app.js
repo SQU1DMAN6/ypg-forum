@@ -469,11 +469,11 @@
       <section class="settings-grid">
         <article class="settings-panel danger-zone"><h3>Account actions</h3>
           <button class="button danger" type="button" id="logout-demo">Log Out</button>
-          <button class="button" type="button" id="reset-data">Reset Local Demo Data</button>
+          <button class="button" type="button" id="reset-data">Reset Browser Cache</button>
           <button class="button" type="button" id="export-data">Preview Local Data</button>
           <pre class="data-preview" id="data-preview"></pre>
         </article>
-        <article class="settings-panel"><h3>Demo auth</h3><p class="quiet">This prototype stores account state in this browser. A backend can replace these helpers later.</p><a class="button" href="signin.html">Sign In Page</a><a class="button" href="signup.html">Sign Up Page</a></article>
+        <article class="settings-panel"><h3>Backend auth</h3><p class="quiet">The site uses an FtR-run YPG backend session and keeps a browser cache for offline fallback.</p><a class="button" href="signin.html">Sign In Page</a><a class="button" href="signup.html">Sign Up Page</a></article>
       </section>`;
     hydrateSettings(store.settings());
   }
@@ -519,7 +519,7 @@
     render.shell({
       activePage: "messages",
       title: "Messages",
-      description: "Direct message shells are ready for backend connection."
+      description: "Direct messages sync through the YPG backend."
     });
     document.getElementById("page-content").innerHTML = `
       <section class="messages-layout">
@@ -537,12 +537,21 @@
             ${(selected?.messages || []).map((message) => {
               const mine = message.senderId === data.currentUserId;
               return `<div class="chat-bubble ${mine ? "mine" : ""}"><p>${render.escapeHtml(message.body)}</p><span>${render.escapeHtml(message.timestamp)}</span></div>`;
-            }).join("") || render.emptyState("No messages yet", "This chat is ready for backend message delivery.")}
+            }).join("") || render.emptyState("No messages yet", "Start the conversation with a thoughtful note.")}
           </div>
-          <form class="chat-compose"><input disabled placeholder="Messaging is ready for backend connection."><button class="button" disabled type="button">Send</button></form>
-          <p class="soft-note">The UI creates/selects conversations now; real sending can connect to a backend API later.</p>
+          <form class="chat-compose" id="chat-compose"><input name="body" placeholder="Write a message"><button class="button" type="submit">Send</button></form>
         </article>
       </section>`;
+    const compose = document.getElementById("chat-compose");
+    if (compose) {
+      compose.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const body = compose.body.value.trim();
+        if (!body) return;
+        store.sendMessage(other.id, body);
+        renderMessages();
+      });
+    }
     bindInteractive();
   }
 
@@ -551,21 +560,30 @@
     render.shell({
       activePage: "signin",
       title: "Sign In",
-      description: "Use demo sign in for now. Real authentication can connect later.",
+      description: "Sign in with the YPG backend session.",
       actionLabel: "Back to Feed",
       actionHref: "index.html"
     });
     document.getElementById("page-content").innerHTML = `
       <section class="auth-card">
+        <form class="form-grid" id="signin-form">
         <h3>Welcome back</h3>
         <p>Sign in to post, follow, vote, and open direct messages.</p>
-        <div class="field"><label>Email or handle</label><input type="text" placeholder="you@mhs or @you"></div>
-        <div class="field"><label>Password</label><input type="password" placeholder="Demo only"></div>
-        <div class="form-actions"><button class="button primary" type="button" id="demo-login">Log in as demo user</button><a class="button" href="signup.html">Create account</a></div>
+        <div class="field"><label>Email or handle</label><input name="identifier" type="text" placeholder="you@mhs or @you" required></div>
+        <div class="field"><label>Password</label><input name="password" type="password" placeholder="Your password"></div>
+        <p class="form-error" id="signin-error" aria-live="polite"></p>
+        <div class="form-actions"><button class="button primary" type="submit" id="demo-login">Sign in</button><a class="button" href="signup.html">Create account</a></div>
+        </form>
       </section>`;
-    document.getElementById("demo-login").addEventListener("click", () => {
-      store.loginDemo();
-      window.location.href = "index.html";
+    document.getElementById("signin-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const fields = event.target.elements;
+      try {
+        await store.loginDemo({ handle: fields.identifier.value.trim().replace(/^@/, ""), email: fields.identifier.value.trim(), password: fields.password.value });
+        window.location.href = "index.html";
+      } catch (error) {
+        document.getElementById("signin-error").textContent = "Could not sign in with those credentials.";
+      }
     });
   }
 
@@ -574,7 +592,7 @@
     render.shell({
       activePage: "signup",
       title: "Sign Up",
-      description: "Create a local demo account for this prototype.",
+      description: "Create a YPG account for the FtR-run backend.",
       actionLabel: "Back to Feed",
       actionHref: "index.html"
     });
@@ -583,19 +601,23 @@
         <form class="form-grid" id="signup-form">
           <div class="field"><label>Display name</label><input name="name" required placeholder="MHS Philosopher"></div>
           <div class="field"><label>Handle</label><input name="handle" required placeholder="yourhandle"></div>
+          <div class="field"><label>Email</label><input name="email" type="email" required placeholder="you@example.com"></div>
+          <div class="field"><label>Password</label><input name="password" type="password" minlength="8" placeholder="Create a strong password"></div>
           <div class="field"><label>Year/group</label><select name="year">${data.signupYears.map((year) => `<option>${year}</option>`).join("")}</select></div>
           <div class="field"><label>Avatar initials</label><input name="initials" maxlength="3" placeholder="YP"></div>
           <div class="field"><label>Avatar color</label><input name="avatarColor" type="color" value="${data.avatarPresets[0]}"></div>
           <div class="field"><label>Bio</label><textarea name="bio" placeholder="What kind of philosophy are you interested in?"></textarea></div>
-          <div class="form-actions"><button class="button primary" type="submit">Create demo account</button><a class="button" href="signin.html">I already have one</a></div>
+          <div class="form-actions"><button class="button primary" type="submit">Create account</button><a class="button" href="signin.html">I already have one</a></div>
         </form>
       </section>`;
-    document.getElementById("signup-form").addEventListener("submit", (event) => {
+    document.getElementById("signup-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const fields = event.target.elements;
-      store.signupLocal({
+      await store.signupLocal({
         name: fields.name.value.trim(),
         handle: fields.handle.value.trim().replace(/^@/, ""),
+        email: fields.email.value.trim(),
+        password: fields.password.value,
         year: fields.year.value,
         initials: (fields.initials.value.trim() || fields.name.value.trim().slice(0, 2)).toUpperCase(),
         avatarColor: fields.avatarColor.value,
@@ -635,7 +657,8 @@
     });
   }
 
-  function init() {
+  async function init() {
+    if (store.ready) await store.ready();
     const app = document.getElementById("app");
     const page = app.dataset.page || "home";
     if (page === "home") renderFeedPage({ mode: "home" });
