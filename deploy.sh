@@ -4,7 +4,7 @@ set -e
 
 ssh root@129.150.63.22 <<'EOF'
 echo "Changing directory..."
-cd /var/www/ypg*/data/www/*/*
+cd /var/www/ypg*/data/www/*
 
 pwd
 
