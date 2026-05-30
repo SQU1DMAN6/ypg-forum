@@ -1,0 +1,10 @@
+[Unit]
+Description=FtR Project YPG Forum Web Server Service
+[Service]
+Type=simple
+Restart=always
+RestartSec=5s
+WorkingDirectory=/var/www/ypg_quanthai_usr/data/www/ypg.quanthai.net
+ExecStart=/var/www/ypg_quanthai_usr/data/www/ypg.quanthai.net/bin/ftr-ypg
+[Install]
+WantedBy=multi-user.target
