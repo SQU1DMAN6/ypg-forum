@@ -3,6 +3,7 @@ package auth
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -19,9 +20,19 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 }
 
 func (r *RateLimiter) Allow(req *http.Request) bool {
-	host, _, err := net.SplitHostPort(req.RemoteAddr)
-	if err != nil {
-		host = req.RemoteAddr
+	host := req.Header.Get("X-Forwarded-For")
+	if host != "" {
+		host = strings.TrimSpace(strings.Split(host, ",")[0])
+	}
+	if host == "" {
+		host = req.Header.Get("X-Real-IP")
+	}
+	if host == "" {
+		var err error
+		host, _, err = net.SplitHostPort(req.RemoteAddr)
+		if err != nil {
+			host = req.RemoteAddr
+		}
 	}
 	now := time.Now()
 	cutoff := now.Add(-r.window)

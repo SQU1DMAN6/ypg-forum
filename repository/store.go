@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,17 +31,8 @@ func GetStore() *Store {
 
 func (s *Store) EnsureSeedData() error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO users (id, handle, email, password_hash, profile_json, settings_json, created_at) VALUES (?, ?, '', '', '{}', '{}', ?)`, "you", "you", now)
-	if err != nil {
-		return err
-	}
-	defaults := []string{"futsali", "mhsthinker"}
-	for _, followed := range defaults {
-		if _, err := s.db.Exec(`INSERT OR IGNORE INTO follows (follower_id, followed_id, created_at) VALUES ('you', ?, ?)`, followed, now); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO users (id, handle, email, password_hash, profile_json, settings_json, created_at) VALUES (?, ?, '', '', '{}', '{}', ?)`, "guest", "guest", now)
+	return err
 }
 
 func (s *Store) State(userID string) (State, error) {
@@ -54,6 +47,9 @@ func (s *Store) State(userID string) (State, error) {
 		Conversations: []map[string]any{},
 	}
 	var err error
+	if state.Users, err = s.Users(); err != nil {
+		return state, err
+	}
 	if state.Posts, err = s.Posts(); err != nil {
 		return state, err
 	}
@@ -78,6 +74,28 @@ func (s *Store) State(userID string) (State, error) {
 	return state, nil
 }
 
+func (s *Store) Users() ([]map[string]any, error) {
+	rows, err := s.db.Query(`SELECT id, handle, profile_json FROM users ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := []map[string]any{}
+	for rows.Next() {
+		var id, handle, profileJSON string
+		if err := rows.Scan(&id, &handle, &profileJSON); err != nil {
+			return nil, err
+		}
+		profile := decodeObject(profileJSON)
+		profile["id"] = id
+		if asString(profile["handle"]) == "" {
+			profile["handle"] = handle
+		}
+		users = append(users, profile)
+	}
+	return users, rows.Err()
+}
+
 func (s *Store) UpsertUserProfile(userID string, account map[string]any) error {
 	handle := slug(asString(account["handle"]))
 	if handle == "" {
@@ -96,6 +114,30 @@ func (s *Store) UpsertUserProfile(userID string, account map[string]any) error {
 		ON CONFLICT(id) DO UPDATE SET handle = excluded.handle, email = excluded.email, password_hash = excluded.password_hash, profile_json = excluded.profile_json`,
 		userID, handle, asString(account["email"]), passwordHash, string(body), time.Now().UTC().Format(time.RFC3339))
 	return err
+}
+
+func (s *Store) CreateUser(account map[string]any) (string, error) {
+	handle := slug(asString(account["handle"]))
+	if handle == "" {
+		return "", errors.New("handle is required")
+	}
+	email := strings.TrimSpace(asString(account["email"]))
+	userID := handle
+	account["id"] = userID
+	account["handle"] = handle
+	passwordHash := asString(account["passwordHash"])
+	delete(account, "passwordHash")
+	body, err := json.Marshal(account)
+	if err != nil {
+		return "", err
+	}
+	_, err = s.db.Exec(`INSERT INTO users (id, handle, email, password_hash, profile_json, settings_json, created_at)
+		VALUES (?, ?, ?, ?, ?, '{}', ?)`,
+		userID, handle, email, passwordHash, string(body), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return "", err
+	}
+	return userID, nil
 }
 
 func (s *Store) Credentials(identifier string) (string, string, error) {
@@ -158,15 +200,15 @@ func (s *Store) Posts() ([]map[string]any, error) {
 func (s *Store) CreatePost(userID string, post map[string]any) (map[string]any, error) {
 	id := asString(post["id"])
 	if id == "" {
-		id = "post-" + time.Now().UTC().Format("20060102150405")
+		id = newID("post")
 	}
 	topics, _ := json.Marshal(post["topicIds"])
 	createdAt := asString(post["createdAt"])
 	if createdAt == "" {
-		createdAt = "Just now"
+		createdAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	_, err := s.db.Exec(`INSERT OR REPLACE INTO posts (id, author_id, title, body, topic_json, score, comment_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, userID, asString(post["title"]), asString(post["body"]), string(topics), intValue(post["score"]), intValue(post["comments"]), createdAt)
+	_, err := s.db.Exec(`INSERT INTO posts (id, author_id, title, body, topic_json, score, comment_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, strings.TrimSpace(asString(post["title"])), strings.TrimSpace(asString(post["body"])), string(topics), 0, 0, createdAt)
 	if err != nil {
 		return nil, err
 	}
@@ -201,18 +243,31 @@ func (s *Store) Comments() (map[string][]any, error) {
 func (s *Store) AddComment(userID, postID string, comment map[string]any) ([]any, error) {
 	id := asString(comment["id"])
 	if id == "" {
-		id = "comment-" + time.Now().UTC().Format("20060102150405")
+		id = newID("comment")
 	}
 	createdAt := asString(comment["createdAt"])
 	if createdAt == "" {
-		createdAt = "Just now"
+		createdAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	_, err := s.db.Exec(`INSERT OR REPLACE INTO comments (id, post_id, author_id, parent_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		id, postID, userID, nullableString(comment["parentId"]), asString(comment["body"]), createdAt)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.db.Exec(`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?`, postID)
+	defer tx.Rollback()
+	result, err := tx.Exec(`INSERT INTO comments (id, post_id, author_id, parent_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, postID, userID, nullableString(comment["parentId"]), strings.TrimSpace(asString(comment["body"])), createdAt)
+	if err != nil {
+		return nil, err
+	}
+	affected, _ := result.RowsAffected()
+	if affected > 0 {
+		if _, err := tx.Exec(`UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?`, postID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	all, err := s.Comments()
 	return all[postID], err
 }
@@ -421,5 +476,20 @@ func nullableString(value any) sql.NullString {
 func slug(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = strings.ReplaceAll(value, "@", "")
-	return strings.ReplaceAll(value, " ", "_")
+	value = strings.ReplaceAll(value, " ", "_")
+	var builder strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+func newID(prefix string) string {
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		return prefix + "-" + time.Now().UTC().Format("20060102150405.000000000")
+	}
+	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + hex.EncodeToString(random)
 }

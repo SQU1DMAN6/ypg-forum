@@ -5,6 +5,7 @@
     follows: `${prefix}follows`,
     votes: `${prefix}votes`,
     profile: `${prefix}profile`,
+    users: `${prefix}users`,
     auth: `${prefix}auth`,
     settings: `${prefix}settings`,
     conversations: `${prefix}conversations`,
@@ -38,6 +39,11 @@
   function hydrateFromBackend(state, userId) {
     if (!state) return;
     sessionUserId = userId || sessionUserId;
+    window.YPG_DATA.currentUserId = sessionUserId;
+    if (Array.isArray(state.users)) {
+      write(keys.users, state.users);
+      window.YPG_DATA.users = state.users.length ? state.users : window.YPG_DATA.users;
+    }
     if (Array.isArray(state.posts)) write(keys.posts, state.posts);
     if (state.comments) write(keys.comments, state.comments);
     if (state.votes) write(keys.votes, state.votes);
@@ -53,7 +59,7 @@
       .then((session) => {
         backendAvailable = true;
         hydrateFromBackend(session.state, session.userId);
-        write(keys.auth, { signedIn: session.signedIn !== false, backend: true });
+        write(keys.auth, { signedIn: session.signedIn === true, backend: true });
       })
       .catch(() => {
         backendAvailable = false;
@@ -77,6 +83,8 @@
     if (api) {
       return api.login(credentials).then((session) => {
         write(keys.auth, { ...auth(), signedIn: true });
+        sessionUserId = session.userId || sessionUserId;
+        window.YPG_DATA.currentUserId = sessionUserId;
         return session;
       });
     }
@@ -90,7 +98,15 @@
   }
 
   function signupLocal(account) {
-    if (api) return api.signup(account);
+    if (api) {
+      return api.signup(account).then((session) => {
+        write(keys.auth, { signedIn: true, backend: true });
+        sessionUserId = session.userId || account.handle;
+        window.YPG_DATA.currentUserId = sessionUserId;
+        if (session.profile) write(keys.profile, session.profile);
+        return session;
+      });
+    }
     write(keys.auth, { signedIn: true, localAccount: account });
     saveProfile(account);
     return Promise.resolve();
@@ -100,11 +116,12 @@
     return [...customPosts(), ...window.YPG_DATA.posts];
   }
 
-  function addPost(post) {
+  async function addPost(post) {
+    const saved = api ? await api.createPost(post) : post;
     const posts = customPosts();
-    posts.unshift(post);
+    posts.unshift(saved);
     write(keys.posts, posts);
-    persist(api?.createPost, post);
+    return saved;
   }
 
   function postById(postId) {
@@ -112,7 +129,7 @@
   }
 
   function follows() {
-    return read(keys.follows, ["futsali", "mhsthinker"]);
+    return read(keys.follows, []);
   }
 
   function isFollowing(userId) {
@@ -172,11 +189,17 @@
     return comments()[postId] || [];
   }
 
-  function addComment(postId, comment) {
+  async function addComment(postId, comment) {
+    if (api) {
+      const saved = await api.addComment(postId, comment);
+      const next = comments();
+      next[postId] = saved;
+      write(keys.comments, next);
+      return saved;
+    }
     const next = comments();
     next[postId] = [...(next[postId] || []), { parentId: null, ...comment }];
     write(keys.comments, next);
-    if (api) api.addComment(postId, comment).catch(() => {});
     return next[postId];
   }
 
@@ -186,9 +209,7 @@
 
   function followersFor(userId) {
     if (userId === window.YPG_DATA.currentUserId) {
-      return window.YPG_DATA.users
-        .filter((user) => user.id !== userId)
-        .filter((user) => ["futsali", "mhsthinker", "socratease"].includes(user.id));
+      return [];
     }
     return [];
   }
@@ -209,6 +230,14 @@
     write(keys.profile, next);
     persist(api?.saveProfile, next);
     return next;
+  }
+
+  async function uploadProfilePicture(file) {
+    if (!api) throw new Error("backend unavailable");
+    const result = await api.uploadProfilePicture(file);
+    if (result.profile) write(keys.profile, result.profile);
+    else if (result.avatarImage) saveProfile({ avatarImage: result.avatarImage });
+    return result.avatarImage || result.profile?.avatarImage;
   }
 
   function settings() {
@@ -282,6 +311,7 @@
       auth: auth(),
       profile: profile(),
       settings: settings(),
+      users: read(keys.users, window.YPG_DATA.users),
       follows: follows(),
       posts: customPosts(),
       comments: comments(),
@@ -313,6 +343,7 @@
     followingUsers,
     profile,
     saveProfile,
+    uploadProfilePicture,
     settings,
     saveSettings,
     conversations,

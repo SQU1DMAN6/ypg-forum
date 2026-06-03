@@ -21,6 +21,7 @@ func RegisterRoutes(r chi.Router) {
 	r.Post("/api/logout", login.LoginLogout)
 	r.Post("/api/signup", register.RegisterMainPost)
 	r.Put("/api/profile", account.Profile)
+	r.Post("/api/profile-picture", account.ProfilePicture)
 	r.Put("/api/settings", account.Settings)
 	r.Get("/api/posts", forum.Posts)
 	r.Post("/api/posts", forum.Posts)

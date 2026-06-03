@@ -150,8 +150,9 @@
         }
       });
     });
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
       const title = form.title.value.trim();
       const body = form.body.value.trim();
       const topicIds = topicInputs.filter((item) => item.checked).map((item) => item.value);
@@ -159,8 +160,9 @@
         error.textContent = "Add a title, post text, and at least one topic.";
         return;
       }
+      submit.disabled = true;
+      submit.textContent = "Posting...";
       const post = {
-        id: `local-${Date.now()}`,
         title,
         body,
         authorId: data.currentUserId,
@@ -169,8 +171,14 @@
         comments: 0,
         createdAt: "Just now"
       };
-      store.addPost(post);
-      window.location.href = `post.html?id=${encodeURIComponent(post.id)}`;
+      try {
+        const saved = await store.addPost(post);
+        window.location.href = `post.html?id=${encodeURIComponent(saved.id)}`;
+      } catch (saveError) {
+        submit.disabled = false;
+        submit.textContent = "Post Discussion";
+        error.textContent = "Could not save that discussion. Please try again in a moment.";
+      }
     });
   }
 
@@ -229,7 +237,7 @@
     bindInteractive();
   }
 
-  function submitComment(postId, form, parentId = null) {
+  async function submitComment(postId, form, parentId = null) {
     if (!store.isSignedIn()) {
       window.location.href = "signin.html";
       return;
@@ -240,14 +248,24 @@
       if (error) error.textContent = "Write a comment before posting.";
       return;
     }
-    store.addComment(postId, {
-      id: `comment-${Date.now()}`,
+    const submit = form.querySelector("button[type='submit']");
+    if (submit.disabled) return;
+    submit.disabled = true;
+    submit.textContent = "Posting...";
+    try {
+      await store.addComment(postId, {
       authorId: data.currentUserId,
       parentId,
       body,
       createdAt: "Just now"
-    });
-    renderPostPage();
+      });
+      renderPostPage();
+    } catch (error) {
+      submit.disabled = false;
+      submit.textContent = parentId ? "Post Reply" : "Post Comment";
+      const errorNode = form.querySelector("[data-comment-error]") || document.getElementById("comment-error");
+      if (errorNode) errorNode.textContent = "Could not save that comment. Please try again.";
+    }
   }
 
   function bindCommentForm(postId) {
@@ -347,7 +365,7 @@
           <div class="field"><label for="profile-year">Year/group</label><input id="profile-year" name="year" type="text" value="${render.escapeHtml(me.year)}"></div>
           <div class="field"><label for="profile-initials">Avatar initials</label><input id="profile-initials" name="initials" type="text" maxlength="3" value="${render.escapeHtml(me.initials)}"></div>
           <div class="field"><label for="profile-color">Avatar color</label><div class="color-picker-row"><input id="profile-color" name="avatarColor" type="color" value="${render.escapeHtml(me.avatarColor)}"><div class="color-presets">${data.avatarPresets.map((color) => `<button type="button" class="color-preset" data-color="${color}" style="--preset-color:${color}" aria-label="Use ${color}"></button>`).join("")}</div></div></div>
-          <div class="field"><label for="profile-image">Profile picture URL</label><input id="profile-image" name="avatarImage" type="url" value="${render.escapeHtml(me.avatarImage || "")}" placeholder="Optional image URL"></div>
+          <div class="field"><label for="profile-image">Profile picture</label><input id="profile-image" name="avatarFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></div>
           <div class="field"><label for="profile-bio">Bio</label><textarea id="profile-bio" name="bio">${render.escapeHtml(me.bio)}</textarea></div>
           <div class="form-actions"><button class="button primary" type="submit">Save Settings</button><a class="button" href="following.html">Open Following Feed</a></div>
           <p class="success-note" id="profile-saved" aria-live="polite"></p>
@@ -378,19 +396,32 @@
         document.getElementById("profile-color").value = button.dataset.color;
       });
     });
-    document.getElementById("profile-form").addEventListener("submit", (event) => {
+    document.getElementById("profile-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = event.target.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      submit.disabled = true;
       const fields = event.target.elements;
-      const saved = store.saveProfile({
+      store.saveProfile({
         name: fields.name.value.trim() || me.name,
         handle: fields.handle.value.trim() || me.handle,
         year: fields.year.value.trim() || me.year,
         initials: fields.initials.value.trim().toUpperCase() || me.initials,
         avatarColor: fields.avatarColor.value || me.avatarColor,
-        avatarImage: fields.avatarImage.value.trim(),
         bio: fields.bio.value.trim() || me.bio
       });
-      document.getElementById("profile-saved").textContent = "Saved. Your profile details are stored in this browser.";
+      const image = fields.avatarFile.files[0];
+      if (image) {
+        try {
+          await store.uploadProfilePicture(image);
+        } catch (error) {
+          document.getElementById("profile-saved").textContent = "Profile saved, but the picture upload failed.";
+          submit.disabled = false;
+          return;
+        }
+      }
+      submit.disabled = false;
+      document.getElementById("profile-saved").textContent = "Saved. Your profile is synced with the YPG backend.";
       const updated = render.userById(data.currentUserId);
       document.getElementById("settings-preview").innerHTML = `${render.avatar(updated, "large")}<div><h3>${render.escapeHtml(updated.name)}</h3><p>@${render.escapeHtml(updated.handle)} &middot; ${render.escapeHtml(updated.year)}</p><p>${render.escapeHtml(updated.bio)}</p></div>`;
       const topbarProfile = document.querySelector(".profile");
@@ -577,11 +608,17 @@
       </section>`;
     document.getElementById("signin-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = event.target.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      submit.disabled = true;
+      submit.textContent = "Signing in...";
       const fields = event.target.elements;
       try {
         await store.loginDemo({ handle: fields.identifier.value.trim().replace(/^@/, ""), email: fields.identifier.value.trim(), password: fields.password.value });
         window.location.href = "index.html";
       } catch (error) {
+        submit.disabled = false;
+        submit.textContent = "Sign in";
         document.getElementById("signin-error").textContent = "Could not sign in with those credentials.";
       }
     });
@@ -603,27 +640,45 @@
           <div class="field"><label>Handle</label><input name="handle" required placeholder="yourhandle"></div>
           <div class="field"><label>Email</label><input name="email" type="email" required placeholder="you@example.com"></div>
           <div class="field"><label>Password</label><input name="password" type="password" minlength="8" placeholder="Create a strong password"></div>
+          <div class="field"><label>Confirm password</label><input name="confirmPassword" type="password" minlength="8" placeholder="Repeat your password"></div>
           <div class="field"><label>Year/group</label><select name="year">${data.signupYears.map((year) => `<option>${year}</option>`).join("")}</select></div>
           <div class="field"><label>Avatar initials</label><input name="initials" maxlength="3" placeholder="YP"></div>
           <div class="field"><label>Avatar color</label><input name="avatarColor" type="color" value="${data.avatarPresets[0]}"></div>
           <div class="field"><label>Bio</label><textarea name="bio" placeholder="What kind of philosophy are you interested in?"></textarea></div>
+          <p class="form-error" id="signup-error" aria-live="polite"></p>
           <div class="form-actions"><button class="button primary" type="submit">Create account</button><a class="button" href="signin.html">I already have one</a></div>
         </form>
       </section>`;
     document.getElementById("signup-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submit = event.target.querySelector("button[type='submit']");
+      if (submit.disabled) return;
       const fields = event.target.elements;
-      await store.signupLocal({
+      const error = document.getElementById("signup-error");
+      if (fields.password.value !== fields.confirmPassword.value) {
+        error.textContent = "Passwords must match.";
+        return;
+      }
+      submit.disabled = true;
+      submit.textContent = "Creating...";
+      try {
+        await store.signupLocal({
         name: fields.name.value.trim(),
         handle: fields.handle.value.trim().replace(/^@/, ""),
         email: fields.email.value.trim(),
         password: fields.password.value,
+        confirmPassword: fields.confirmPassword.value,
         year: fields.year.value,
         initials: (fields.initials.value.trim() || fields.name.value.trim().slice(0, 2)).toUpperCase(),
         avatarColor: fields.avatarColor.value,
         bio: fields.bio.value.trim() || "New YPG member, ready to discuss better questions."
-      });
-      window.location.href = "profile.html";
+        });
+        window.location.href = "profile.html";
+      } catch (signupError) {
+        submit.disabled = false;
+        submit.textContent = "Create account";
+        error.textContent = "Could not create that account. The handle or email may already be taken.";
+      }
     });
   }
 

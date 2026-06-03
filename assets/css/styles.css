@@ -1,10 +1,11 @@
 :root {
-  --bg: #faf9f7;
-  --panel: rgba(255, 255, 255, 0.86);
-  --line: rgba(20, 20, 20, 0.08);
+  --bg: #f6f7f4;
+  --panel: rgba(255, 255, 255, 0.72);
+  --line: rgba(20, 20, 20, 0.1);
   --text: #161616;
   --muted: #6d6d6d;
-  --shadow: 0 12px 30px rgba(0, 0, 0, 0.07);
+  --shadow: 14px 18px 38px rgba(38, 49, 62, 0.11), -10px -10px 26px rgba(255, 255, 255, 0.88);
+  --glass: blur(18px) saturate(1.16);
   --sidebar: 230px;
   --right: 320px;
   --white: #ffffff;
@@ -23,8 +24,9 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 36%),
-    linear-gradient(180deg, #fbfbfa 0%, #f6f3ef 100%);
+    linear-gradient(135deg, rgba(217, 245, 207, 0.58), transparent 28%),
+    linear-gradient(225deg, rgba(215, 235, 255, 0.56), transparent 30%),
+    linear-gradient(180deg, #fbfcf9 0%, var(--bg) 100%);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -112,8 +114,9 @@ button {
 .stats-row,
 .empty-state {
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: 22px;
   background: var(--panel);
+  backdrop-filter: var(--glass);
   box-shadow: var(--shadow);
 }
 
@@ -225,18 +228,26 @@ button {
   min-height: 56px;
   padding: 0 22px;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 16px;
-  background: var(--white);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
   color: var(--ink);
   font-weight: 900;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
-  transition: transform 0.18s ease, background 0.18s ease;
+  box-shadow: 8px 10px 22px rgba(38, 49, 62, 0.1), -7px -7px 18px rgba(255, 255, 255, 0.92);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
 }
 
 .button:hover,
 .create-post:hover {
   transform: translateY(-2px);
   background: #f5f5f5;
+}
+
+.button:disabled,
+button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: inset 5px 5px 12px rgba(38, 49, 62, 0.12), inset -5px -5px 12px rgba(255, 255, 255, 0.86);
 }
 
 .button.compact {
@@ -278,9 +289,10 @@ button {
   justify-self: center;
   padding: 0 14px 0 18px;
   border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 16px;
-  background: var(--white);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: var(--glass);
+  box-shadow: inset 5px 5px 12px rgba(38, 49, 62, 0.08), inset -6px -6px 14px rgba(255, 255, 255, 0.9);
 }
 
 .search span {
@@ -434,6 +446,7 @@ button {
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
 }
 
 .post {
@@ -446,7 +459,7 @@ button {
 
 .post:hover {
   transform: translateY(-3px);
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.09);
+  box-shadow: 16px 22px 48px rgba(38, 49, 62, 0.14), -9px -9px 22px rgba(255, 255, 255, 0.9);
 }
 
 .post-inner {
@@ -873,10 +886,11 @@ button {
 .setting-row select {
   width: 100%;
   border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 16px;
-  background: #ffffff;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
   color: var(--text);
   padding: 14px 16px;
+  box-shadow: inset 4px 4px 9px rgba(38, 49, 62, 0.07), inset -5px -5px 12px rgba(255, 255, 255, 0.86);
 }
 
 .field textarea {
@@ -927,8 +941,9 @@ button {
 .chat-shell,
 .chat-list {
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 20px;
   background: var(--panel);
+  backdrop-filter: var(--glass);
   box-shadow: var(--shadow);
   padding: 16px;
 }

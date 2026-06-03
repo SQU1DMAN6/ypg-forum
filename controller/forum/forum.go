@@ -2,13 +2,18 @@ package forum
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
+	"ftr-ypg/controller/auth"
 	"ftr-ypg/controller/login"
 	"ftr-ypg/controller/response"
 	"ftr-ypg/repository"
 
 	"github.com/go-chi/chi/v5"
 )
+
+var writeLimits = auth.NewRateLimiter(120, 10*time.Minute)
 
 func Posts(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
@@ -24,9 +29,17 @@ func Posts(w http.ResponseWriter, r *http.Request) {
 	if !response.ReadJSON(w, r, &post) {
 		return
 	}
+	if !writeLimits.Allow(r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(asString(post["title"])) == "" || strings.TrimSpace(asString(post["body"])) == "" {
+		http.Error(w, "title and body are required", http.StatusBadRequest)
 		return
 	}
 	created, err := repository.GetStore().CreatePost(userID, post)
@@ -45,9 +58,17 @@ func Comments(w http.ResponseWriter, r *http.Request) {
 	if !response.ReadJSON(w, r, &payload) || payload.PostID == "" {
 		return
 	}
+	if !writeLimits.Allow(r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(asString(payload.Comment["body"])) == "" {
+		http.Error(w, "comment body is required", http.StatusBadRequest)
 		return
 	}
 	comments, err := repository.GetStore().AddComment(userID, payload.PostID, payload.Comment)
@@ -62,6 +83,10 @@ func Follow(w http.ResponseWriter, r *http.Request) {
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if !writeLimits.Allow(r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	follows, err := repository.GetStore().ToggleFollow(userID, chi.URLParam(r, "user"))
@@ -82,6 +107,10 @@ func Vote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
+	if !writeLimits.Allow(r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	votes, err := repository.GetStore().ToggleVote(userID, chi.URLParam(r, "post"), asString(payload["direction"]))
 	if err != nil {
 		http.Error(w, "could not update vote", http.StatusInternalServerError)
@@ -97,6 +126,10 @@ func Conversations(w http.ResponseWriter, r *http.Request) {
 	}
 	if login.CurrentUserID(r) == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if !writeLimits.Allow(r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if err := repository.GetStore().SaveConversations(conversations); err != nil {

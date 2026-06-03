@@ -17,7 +17,11 @@ func RegisterStatic(r *chi.Mux) {
 		log.Fatalf("Error getting working directory: %v", err)
 	}
 	assetsPath := filepath.Join(projectRoot(workDir), "assets")
+	userDataPath := filepath.Join(projectRoot(workDir), "ypg", "userData")
 	checkDirExists(assetsPath, "assets")
+	if err := os.MkdirAll(userDataPath, 0o755); err != nil {
+		log.Printf("Warning: user data directory could not be created at %s", userDataPath)
+	}
 	fileServer := func(path string) http.Handler {
 		fs := http.FileServer(http.Dir(path))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,6 +30,7 @@ func RegisterStatic(r *chi.Mux) {
 		})
 	}
 	r.Handle("/assets/*", http.StripPrefix("/assets/", fileServer(assetsPath)))
+	r.Handle("/ypg/userData/*", http.StripPrefix("/ypg/userData/", fileServer(userDataPath)))
 }
 
 func ServeHTMLPage(w http.ResponseWriter, r *http.Request) {

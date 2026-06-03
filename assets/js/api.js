@@ -2,9 +2,10 @@
   const jsonHeaders = { "Content-Type": "application/json" };
 
   async function request(path, options = {}) {
+    const headers = options.headers === null ? undefined : { ...jsonHeaders, ...(options.headers || {}) };
     const response = await fetch(path, {
       credentials: "same-origin",
-      headers: jsonHeaders,
+      headers,
       ...options
     });
     if (!response.ok) throw new Error(`YPG API ${response.status}: ${path}`);
@@ -46,6 +47,11 @@
     },
     saveProfile(profile) {
       return put("/api/profile", profile);
+    },
+    uploadProfilePicture(file) {
+      const form = new FormData();
+      form.append("avatar", file);
+      return request("/api/profile-picture", { method: "POST", headers: null, body: form });
     },
     saveSettings(settings) {
       return put("/api/settings", settings);

@@ -30,7 +30,7 @@ func migrate(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS users (
 			id TEXT PRIMARY KEY,
 			handle TEXT NOT NULL UNIQUE,
-			email TEXT NOT NULL DEFAULT '',
+			email TEXT NOT NULL DEFAULT '' UNIQUE,
 			password_hash TEXT NOT NULL DEFAULT '',
 			profile_json TEXT NOT NULL DEFAULT '{}',
 			settings_json TEXT NOT NULL DEFAULT '{}',
@@ -86,6 +86,9 @@ func migrate(db *sql.DB) error {
 		if _, err := db.Exec(statement); err != nil {
 			return err
 		}
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email) WHERE email <> ''`); err != nil {
+		return err
 	}
 	return nil
 }
