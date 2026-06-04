@@ -103,18 +103,18 @@
     const author = userById(post.authorId);
     const href = postLink(post);
     return `
-      <article class="post" style="--post-color:${topicById(post.topicIds[0])?.color || "#ececec"}" data-post-id="${escapeHtml(post.id)}">
+      <article class="post" tabindex="0" style="--post-color:${topicById(post.topicIds[0])?.color || "#ececec"}" data-post-id="${escapeHtml(post.id)}" data-post-link="${href}">
         <div class="post-inner">
           <div class="post-head">
             ${userLink(author, "user")}
             ${followButton(author.id)}
             <div class="post-meta"><span>${escapeHtml(post.createdAt)}</span><span>${store().commentCountFor(post)} comments</span></div>
           </div>
-          <a class="post-content post-card-link" href="${href}">
+          <div class="post-content post-card-link" data-post-link-inner="${href}">
             <div class="tag-row">${topicTags(post.topicIds)}</div>
             <h3>${escapeHtml(post.title)}</h3>
             <p>${escapeHtml(post.body)}</p>
-          </a>
+          </div>
           <div class="post-footer">
             ${voteControls(post)}
           </div>

@@ -2,13 +2,29 @@
   const jsonHeaders = { "Content-Type": "application/json" };
 
   async function request(path, options = {}) {
-    const headers = options.headers === null ? undefined : { ...jsonHeaders, ...(options.headers || {}) };
-    const response = await fetch(path, {
+    const requestInit = {
       credentials: "same-origin",
-      headers,
       ...options
-    });
-    if (!response.ok) throw new Error(`YPG API ${response.status}: ${path}`);
+    };
+    if (options.headers === null) {
+      delete requestInit.headers;
+    } else {
+      requestInit.headers = { ...jsonHeaders, ...(options.headers || {}) };
+    }
+    const response = await fetch(path, requestInit);
+    if (!response.ok) {
+      let details = "";
+      try {
+        const json = await response.json();
+        if (json && json.error) details = ` ${json.error}`;
+      } catch (error) {
+        try {
+          const text = await response.text();
+          if (text) details = ` ${text}`;
+        } catch (ignore) {}
+      }
+      throw new Error(`YPG API ${response.status}: ${path}${details}`);
+    }
     return response.json();
   }
 
@@ -33,8 +49,8 @@
     signup(account) {
       return post("/api/signup", account);
     },
-    createPost(post) {
-      return post("/api/posts", post);
+    createPost(payload) {
+      return post("/api/posts", payload);
     },
     addComment(postId, comment) {
       return post("/api/comments", { postId, comment });

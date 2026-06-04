@@ -45,7 +45,7 @@
 
   const avatarPresets = ["#27304f", "#2e3e69", "#47735f", "#796236", "#795153", "#3f6f8f", "#6d4c8d", "#315b5a"];
 
-  const signupYears = ["Year 7", "Year 8", "Year 9", "Year 10", "Year 11", "Year 12", "Teacher"];
+  const signupYears = ["Year 9", "Year 10", "Year 11", "Year 12", "Teacher"];
 
   window.YPG_DATA = {
     currentUserId: "guest",

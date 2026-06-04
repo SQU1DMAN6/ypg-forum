@@ -59,10 +59,12 @@
       .then((session) => {
         backendAvailable = true;
         hydrateFromBackend(session.state, session.userId);
-        write(keys.auth, { signedIn: session.signedIn === true, backend: true });
+        write(keys.auth, { signedIn: session.signedIn === true, backend: true, localAccount: auth().localAccount || null });
       })
       .catch(() => {
         backendAvailable = false;
+        const currentAuth = auth();
+        write(keys.auth, { signedIn: false, backend: false, localAccount: currentAuth.localAccount || null });
       }) : Promise.resolve();
     return readyPromise;
   }
@@ -82,7 +84,8 @@
   function loginDemo(credentials = {}) {
     if (api) {
       return api.login(credentials).then((session) => {
-        write(keys.auth, { ...auth(), signedIn: true });
+        backendAvailable = true;
+        write(keys.auth, { ...auth(), signedIn: true, backend: true });
         sessionUserId = session.userId || sessionUserId;
         window.YPG_DATA.currentUserId = sessionUserId;
         return session;
@@ -100,6 +103,7 @@
   function signupLocal(account) {
     if (api) {
       return api.signup(account).then((session) => {
+        backendAvailable = true;
         write(keys.auth, { signedIn: true, backend: true });
         sessionUserId = session.userId || account.handle;
         window.YPG_DATA.currentUserId = sessionUserId;
@@ -117,7 +121,7 @@
   }
 
   async function addPost(post) {
-    const saved = api ? await api.createPost(post) : post;
+    const saved = api && backendAvailable ? await api.createPost(post) : post;
     const posts = customPosts();
     posts.unshift(saved);
     write(keys.posts, posts);
@@ -243,7 +247,7 @@
   }
 
   async function uploadProfilePicture(file) {
-    if (!api) throw new Error("backend unavailable");
+    if (!api || !backendAvailable) throw new Error("backend unavailable");
     const result = await api.uploadProfilePicture(file);
     if (result.profile) write(keys.profile, result.profile);
     else if (result.avatarImage) saveProfile({ avatarImage: result.avatarImage });

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"ftr-ypg/controller/account"
+	"ftr-ypg/controller/favicon"
 	"ftr-ypg/controller/forum"
 	"ftr-ypg/controller/login"
 	"ftr-ypg/controller/register"
@@ -29,4 +30,5 @@ func RegisterRoutes(r chi.Router) {
 	r.Post("/api/follows/{user}", forum.Follow)
 	r.Post("/api/votes/{post}", forum.Vote)
 	r.Put("/api/conversations", forum.Conversations)
+	r.Get("/favicon.ico", favicon.Favicon)
 }

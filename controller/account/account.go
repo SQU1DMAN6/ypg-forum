@@ -1,9 +1,11 @@
 package account
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,7 +61,10 @@ func ProfilePicture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	contentType := header.Header.Get("Content-Type")
+	// Peek at the first bytes to detect content type more reliably
+	buf := make([]byte, 512)
+	n, _ := file.Read(buf)
+	contentType := http.DetectContentType(buf[:n])
 	ext := extensionFor(contentType, header.Filename)
 	if ext == "" {
 		http.Error(w, "unsupported image type", http.StatusBadRequest)
@@ -82,7 +87,9 @@ func ProfilePicture(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not save image", http.StatusInternalServerError)
 		return
 	}
-	if _, err := io.Copy(out, io.LimitReader(file, 5<<20)); err != nil {
+	// write the bytes we already read followed by the remainder of the file
+	reader := io.MultiReader(bytes.NewReader(buf[:n]), io.LimitReader(file, 5<<20))
+	if _, err := io.Copy(out, reader); err != nil {
 		_ = out.Close()
 		_ = os.Remove(diskPath)
 		http.Error(w, "could not save image", http.StatusInternalServerError)
@@ -98,11 +105,17 @@ func ProfilePicture(w http.ResponseWriter, r *http.Request) {
 	profile["avatarImage"] = publicPath
 	if err := repository.GetStore().SaveProfile(userID, profile); err != nil {
 		_ = os.Remove(diskPath)
+		log.Printf("profile picture upload failed for user %s: %v", userID, err)
 		http.Error(w, "could not update profile", http.StatusInternalServerError)
 		return
 	}
 	if strings.HasPrefix(oldImage, "/ypg/userData/pfp/"+safeName(userID)+"/") {
-		_ = os.Remove(strings.TrimPrefix(oldImage, "/"))
+		oldPath := strings.TrimPrefix(oldImage, "/")
+		if oldPath != diskPath {
+			if err := os.Remove(oldPath); err != nil {
+				log.Printf("failed to remove old profile picture %s for user %s: %v", oldPath, userID, err)
+			}
+		}
 	}
 	response.JSON(w, map[string]any{"avatarImage": publicPath, "profile": profile})
 }

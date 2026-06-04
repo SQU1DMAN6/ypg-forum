@@ -162,7 +162,7 @@
       }
       submit.disabled = true;
       submit.textContent = "Posting...";
-      const post = {
+      const postData = {
         title,
         body,
         authorId: data.currentUserId,
@@ -172,12 +172,17 @@
         createdAt: "Just now"
       };
       try {
-        const saved = await store.addPost(post);
+        const saved = await store.addPost(postData);
         window.location.href = `post.html?id=${encodeURIComponent(saved.id)}`;
       } catch (saveError) {
         submit.disabled = false;
         submit.textContent = "Post Discussion";
-        error.textContent = "Could not save that discussion. Please try again in a moment.";
+        console.error("Post save failed", saveError);
+        if (saveError?.message?.includes("401")) {
+          error.textContent = "You need to sign in again before posting. Please refresh and sign in.";
+        } else {
+          error.textContent = `Could not save that discussion. ${saveError.message || "Please try again in a moment."}`;
+        }
       }
     });
   }
@@ -402,7 +407,7 @@
       if (submit.disabled) return;
       submit.disabled = true;
       const fields = event.target.elements;
-      store.saveProfile({
+      await store.saveProfile({
         name: fields.name.value.trim() || me.name,
         handle: fields.handle.value.trim() || me.handle,
         year: fields.year.value.trim() || me.year,
@@ -415,7 +420,8 @@
         try {
           await store.uploadProfilePicture(image);
         } catch (error) {
-          document.getElementById("profile-saved").textContent = "Profile saved, but the picture upload failed.";
+          console.error("Profile picture upload failed", error);
+          document.getElementById("profile-saved").textContent = `Profile saved, but picture upload failed: ${error.message}`;
           submit.disabled = false;
           return;
         }
@@ -698,16 +704,32 @@
 
   function bindInteractive() {
     document.querySelectorAll("[data-follow-user]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
         store.toggleFollow(button.dataset.followUser);
         refreshCurrentPage();
       });
     });
     document.querySelectorAll("[data-vote]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
         const postId = button.dataset.postId;
         store.toggleVote(postId, button.dataset.vote);
         refreshCurrentPage();
+      });
+    });
+    document.querySelectorAll("article.post[data-post-link]").forEach((article) => {
+      article.addEventListener("click", (event) => {
+        if (event.target.closest("button, a, input, textarea, select")) return;
+        const href = article.dataset.postLink;
+        if (href) window.location.href = href;
+      });
+      article.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (event.target.closest("button, a, input, textarea, select")) return;
+        event.preventDefault();
+        const href = article.dataset.postLink;
+        if (href) window.location.href = href;
       });
     });
   }

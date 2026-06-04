@@ -1,6 +1,7 @@
 package forum
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -42,8 +43,25 @@ func Posts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "title and body are required", http.StatusBadRequest)
 		return
 	}
+	// Ensure at least one topic is provided and is an array
+	if rawTopics, ok := post["topicIds"]; !ok {
+		http.Error(w, "at least one topic is required", http.StatusBadRequest)
+		return
+	} else {
+		switch v := rawTopics.(type) {
+		case []any:
+			if len(v) == 0 {
+				http.Error(w, "at least one topic is required", http.StatusBadRequest)
+				return
+			}
+		default:
+			http.Error(w, "invalid topics", http.StatusBadRequest)
+			return
+		}
+	}
 	created, err := repository.GetStore().CreatePost(userID, post)
 	if err != nil {
+		log.Printf("could not create post for user %s: %v", userID, err)
 		http.Error(w, "could not create post", http.StatusInternalServerError)
 		return
 	}
