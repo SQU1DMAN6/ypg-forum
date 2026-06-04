@@ -16,11 +16,28 @@
   }
 
   function userById(id) {
-    const base = data().users.find((user) => user.id === id) || data().users[0];
+    const fallback = { id: "guest", name: "YPG Member", handle: "guest", initials: "YP", avatarColor: "#27304f", year: "YPG", bio: "", interests: [] };
+    const base = data().users.find((user) => user.id === id) || data().users[0] || fallback;
     if (id === data().currentUserId) {
-      return { ...base, ...store().profile() };
+      return normalizeUser({ ...base, ...store().profile() });
     }
-    return base;
+    return normalizeUser(base);
+  }
+
+  function normalizeUser(user) {
+    const name = user?.name || user?.handle || "YPG Member";
+    const handle = user?.handle || user?.id || "guest";
+    return {
+      id: user?.id || handle,
+      name,
+      handle,
+      initials: user?.initials || name.slice(0, 2).toUpperCase(),
+      avatarColor: user?.avatarColor || "#27304f",
+      year: user?.year || "YPG",
+      bio: user?.bio || "",
+      interests: Array.isArray(user?.interests) ? user.interests : [],
+      avatarImage: user?.avatarImage || ""
+    };
   }
 
   function isSignedIn() {
@@ -33,8 +50,9 @@
   }
 
   function avatar(user, sizeClass = "") {
-    const image = user.avatarImage ? `background-image:url('${escapeHtml(user.avatarImage)}')` : "";
-    return `<span class="avatar ${sizeClass} ${user.avatarImage ? "has-image" : ""}" style="--avatar-color:${escapeHtml(user.avatarColor)};${image}">${user.avatarImage ? "" : escapeHtml(user.initials || user.name.slice(0, 2))}</span>`;
+    const safeUser = normalizeUser(user);
+    const image = safeUser.avatarImage ? `background-image:url('${escapeHtml(safeUser.avatarImage)}')` : "";
+    return `<span class="avatar ${sizeClass} ${safeUser.avatarImage ? "has-image" : ""}" style="--avatar-color:${escapeHtml(safeUser.avatarColor)};${image}">${safeUser.avatarImage ? "" : escapeHtml(safeUser.initials || safeUser.name.slice(0, 2))}</span>`;
   }
 
   function userLink(user, className = "user-link") {

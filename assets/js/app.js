@@ -216,7 +216,7 @@
       <section class="comments-panel">
         <div class="section-heading inline-heading"><h3>Comments</h3><span>${store.commentCountFor(post)} total</span></div>
         <div class="comment-list">
-          ${comments.length ? render.threadedComments(comments) : render.emptyState("No local comments yet", "Start the discussion with a thoughtful reply.")}
+          ${comments.length ? render.threadedComments(comments) : render.emptyState("No comments yet", "Start the discussion with a thoughtful reply.")}
         </div>
         <form class="comment-form" id="comment-form">
           <label for="comment-body">Add a comment</label>
@@ -455,14 +455,14 @@
       if (element) element.checked = Boolean(settings[key]);
       if (element) element.addEventListener("change", () => store.saveSettings({ [key]: element.checked }));
     });
-    const logout = document.getElementById("logout-demo");
+    const logout = document.getElementById("logout-account");
     if (logout) logout.addEventListener("click", () => {
       store.logoutDemo();
       window.location.href = "signin.html";
     });
     const reset = document.getElementById("reset-data");
     if (reset) reset.addEventListener("click", () => {
-      store.resetLocalDemoData();
+      store.resetBrowserCache();
       window.location.href = "index.html";
     });
     const exportData = document.getElementById("export-data");
@@ -490,7 +490,7 @@
     document.getElementById("page-content").innerHTML = `
       <section class="profile-hero">
         ${render.avatar(me, "large")}
-        <div><h3>${render.escapeHtml(me.name)}</h3><p>@${render.escapeHtml(me.handle)}</p><p class="quiet">Account controls, local demo data, followers, and following.</p></div>
+        <div><h3>${render.escapeHtml(me.name)}</h3><p>@${render.escapeHtml(me.handle)}</p><p class="quiet">Account controls, followers, following, and browser cache management.</p></div>
         <div class="profile-actions"><a class="follow" href="settings.html">Settings</a><a class="follow muted-follow" href="profile.html">Profile</a></div>
       </section>
       <section class="follow-grid">
@@ -499,9 +499,9 @@
       </section>
       <section class="settings-grid">
         <article class="settings-panel danger-zone"><h3>Account actions</h3>
-          <button class="button danger" type="button" id="logout-demo">Log Out</button>
+          <button class="button danger" type="button" id="logout-account">Log Out</button>
           <button class="button" type="button" id="reset-data">Reset Browser Cache</button>
-          <button class="button" type="button" id="export-data">Preview Local Data</button>
+          <button class="button" type="button" id="export-data">Preview Browser Cache</button>
           <pre class="data-preview" id="data-preview"></pre>
         </article>
         <article class="settings-panel"><h3>Backend auth</h3><p class="quiet">The site uses an FtR-run YPG backend session and keeps a browser cache for offline fallback.</p><a class="button" href="signin.html">Sign In Page</a><a class="button" href="signup.html">Sign Up Page</a></article>
@@ -603,7 +603,7 @@
         <div class="field"><label>Email or handle</label><input name="identifier" type="text" placeholder="you@mhs or @you" required></div>
         <div class="field"><label>Password</label><input name="password" type="password" placeholder="Your password"></div>
         <p class="form-error" id="signin-error" aria-live="polite"></p>
-        <div class="form-actions"><button class="button primary" type="submit" id="demo-login">Sign in</button><a class="button" href="signup.html">Create account</a></div>
+        <div class="form-actions"><button class="button primary" type="submit" id="signin-submit">Sign in</button><a class="button" href="signup.html">Create account</a></div>
         </form>
       </section>`;
     document.getElementById("signin-form").addEventListener("submit", async (event) => {

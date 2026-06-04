@@ -72,7 +72,7 @@
   }
 
   function auth() {
-    return read(keys.auth, { signedIn: true, localAccount: null });
+    return read(keys.auth, { signedIn: false, localAccount: null });
   }
 
   function isSignedIn() {
@@ -222,7 +222,17 @@
 
   function profile() {
     const authState = auth();
-    return { ...(authState.localAccount || {}), ...read(keys.profile, {}) };
+    return {
+      name: "YPG Member",
+      handle: window.YPG_DATA.currentUserId || "guest",
+      initials: "YP",
+      avatarColor: "#27304f",
+      year: "YPG",
+      bio: "",
+      interests: [],
+      ...(authState.localAccount || {}),
+      ...read(keys.profile, {})
+    };
   }
 
   function saveProfile(updates) {
@@ -302,7 +312,7 @@
     return conversation;
   }
 
-  function resetLocalDemoData() {
+  function resetBrowserCache() {
     Object.values(keys).forEach((key) => localStorage.removeItem(key));
   }
 
@@ -349,7 +359,7 @@
     conversations,
     conversationWith,
     sendMessage,
-    resetLocalDemoData,
+    resetBrowserCache,
     exportLocalData
   };
 })();

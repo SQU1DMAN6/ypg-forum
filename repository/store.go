@@ -31,7 +31,11 @@ func GetStore() *Store {
 
 func (s *Store) EnsureSeedData() error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO users (id, handle, email, password_hash, profile_json, settings_json, created_at) VALUES (?, ?, '', '', '{}', '{}', ?)`, "guest", "guest", now)
+	profile, err := json.Marshal(defaultProfile("guest", "guest"))
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO users (id, handle, email, password_hash, profile_json, settings_json, created_at) VALUES (?, ?, '', '', ?, '{}', ?)`, "guest", "guest", string(profile), now)
 	return err
 }
 
@@ -91,7 +95,7 @@ func (s *Store) Users() ([]map[string]any, error) {
 		if asString(profile["handle"]) == "" {
 			profile["handle"] = handle
 		}
-		users = append(users, profile)
+		users = append(users, completeProfile(id, handle, profile))
 	}
 	return users, rows.Err()
 }
@@ -150,12 +154,17 @@ func (s *Store) AccountData(userID string) (map[string]any, map[string]any, erro
 	var profileJSON, settingsJSON string
 	err := s.db.QueryRow(`SELECT profile_json, settings_json FROM users WHERE id = ?`, userID).Scan(&profileJSON, &settingsJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		return map[string]any{}, map[string]any{}, nil
+		return defaultProfile(userID, userID), map[string]any{}, nil
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	return decodeObject(profileJSON), decodeObject(settingsJSON), nil
+	profile := decodeObject(profileJSON)
+	handle := asString(profile["handle"])
+	if handle == "" {
+		handle = userID
+	}
+	return completeProfile(userID, handle, profile), decodeObject(settingsJSON), nil
 }
 
 func (s *Store) SaveProfile(userID string, profile map[string]any) error {
@@ -278,7 +287,7 @@ func (s *Store) Follows(userID string) ([]string, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var follows []string
+	follows := []string{}
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
@@ -437,6 +446,9 @@ func decodeArray(value string) []any {
 }
 
 func asString(value any) string {
+	if value == nil {
+		return ""
+	}
 	if text, ok := value.(string); ok {
 		return text
 	}
@@ -492,4 +504,59 @@ func newID(prefix string) string {
 		return prefix + "-" + time.Now().UTC().Format("20060102150405.000000000")
 	}
 	return prefix + "-" + time.Now().UTC().Format("20060102150405") + "-" + hex.EncodeToString(random)
+}
+
+func defaultProfile(id, handle string) map[string]any {
+	if handle == "" {
+		handle = id
+	}
+	name := "YPG Member"
+	if id != "guest" && handle != "" {
+		name = handle
+	}
+	initials := "YP"
+	if name != "" {
+		initials = strings.ToUpper(name[:min(2, len(name))])
+	}
+	return map[string]any{
+		"id":          id,
+		"name":        name,
+		"handle":      handle,
+		"initials":    initials,
+		"avatarColor": "#27304f",
+		"year":        "YPG",
+		"bio":         "",
+		"interests":   []any{},
+	}
+}
+
+func completeProfile(id, handle string, profile map[string]any) map[string]any {
+	base := defaultProfile(id, handle)
+	for key, value := range profile {
+		if asString(value) != "" || key == "interests" || key == "avatarImage" {
+			base[key] = value
+		}
+	}
+	base["id"] = id
+	if asString(base["handle"]) == "" {
+		base["handle"] = handle
+	}
+	if asString(base["name"]) == "" {
+		base["name"] = asString(base["handle"])
+	}
+	if asString(base["initials"]) == "" {
+		name := asString(base["name"])
+		base["initials"] = strings.ToUpper(name[:min(2, len(name))])
+	}
+	if asString(base["avatarColor"]) == "" {
+		base["avatarColor"] = "#27304f"
+	}
+	return base
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

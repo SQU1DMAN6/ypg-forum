@@ -20,7 +20,7 @@ func Session(w http.ResponseWriter, r *http.Request) {
 	userID := CurrentUserID(r)
 	signedIn := userID != ""
 	if userID == "" {
-		userID = "you"
+		userID = "guest"
 	}
 	state, err := repository.GetStore().State(userID)
 	if err != nil {

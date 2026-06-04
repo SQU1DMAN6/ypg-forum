@@ -1191,17 +1191,95 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
   .app {
-    padding: 12px;
+    display: block;
+    min-height: 100svh;
+    padding: 10px;
   }
 
   .left {
     display: block;
+    margin-bottom: 12px;
+  }
+
+  .brand {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    min-height: 64px;
+    margin: -10px -10px 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(246, 247, 244, 0.92);
+    backdrop-filter: var(--glass);
+  }
+
+  .logo {
+    width: 48px;
+  }
+
+  .brand-copy h1 {
+    font-size: 1rem;
+  }
+
+  .sidebar-card {
+    margin: 0 -10px 12px;
+    padding: 10px 10px 12px;
+    border-width: 1px 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.58);
+  }
+
+  .topic-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 8px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .topic-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topic {
+    min-width: max-content;
+    min-height: 42px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    scroll-snap-align: start;
+    font-size: 0.88rem;
+  }
+
+  .topic:hover,
+  .topic.active {
+    transform: none;
+  }
+
+  .sidebar-card .divider,
+  .sidebar-card .section-label,
+  .sidebar-card .dm-list {
+    display: none;
   }
 
   .topbar {
-    position: static;
+    position: sticky;
+    top: 64px;
+    z-index: 25;
     grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 0 -2px 12px;
+    padding: 8px 0;
+    background: rgba(246, 247, 244, 0.9);
+    backdrop-filter: var(--glass);
   }
 
   .create-post,
@@ -1209,8 +1287,37 @@ button:disabled {
     width: 100%;
   }
 
+  .button,
+  .create-post,
+  .search {
+    min-height: 48px;
+  }
+
+  .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .auth-actions .button {
+    width: 100%;
+  }
+
   .profile {
-    justify-self: start;
+    justify-self: end;
+  }
+
+  .profile-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .page-title {
+    margin-bottom: 12px;
+  }
+
+  .page-title h2 {
+    font-size: 1.55rem;
   }
 
   .filter-panel,
@@ -1222,8 +1329,76 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .filter-panel,
+  .content-panel,
+  .profile-hero,
+  .empty-state,
+  .post-detail,
+  .comments-panel,
+  .related-panel,
+  .settings-panel,
+  .auth-card,
+  .chat-shell,
+  .chat-list {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .chip-row,
+  .tag-row,
+  .form-actions {
+    gap: 7px;
+  }
+
+  .chip,
+  .tag,
+  .pill {
+    max-width: 100%;
+  }
+
+  .post {
+    border-radius: 18px;
+  }
+
+  .post:hover {
+    transform: none;
+  }
+
+  .post-inner {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .post-content h3 {
+    font-size: 1.1rem;
+  }
+
+  .post-content p,
+  .post-detail p,
+  .comment-card p {
+    font-size: 0.96rem;
+    line-height: 1.5;
+  }
+
+  .post-detail h3 {
+    font-size: 1.45rem;
+  }
+
   .chat-compose {
     grid-template-columns: 1fr;
+  }
+
+  .chat-shell {
+    min-height: 420px;
+  }
+
+  .chat-bubble {
+    max-width: 92%;
+  }
+
+  .chat-list {
+    max-height: 270px;
+    overflow: auto;
   }
 
   .post-meta {
@@ -1234,6 +1409,29 @@ button:disabled {
   .post-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .profile-hero {
+    align-items: start;
+  }
+
+  .profile-hero .profile-actions {
+    width: 100%;
+  }
+
+  .profile-hero .follow,
+  .profile-actions .follow {
+    flex: 1;
+  }
+
+  .avatar.large {
+    width: 74px;
+    height: 74px;
+    font-size: 1.2rem;
+  }
+
+  .stats-row div {
+    padding: 13px 14px;
   }
 
   .related-grid {
@@ -1251,5 +1449,81 @@ button:disabled {
   .message-card .pill {
     grid-column: 1 / -1;
     width: max-content;
+  }
+
+  .field input,
+  .field textarea,
+  .field select,
+  .setting-row select,
+  .chat-compose input,
+  .comment-form textarea {
+    min-height: 48px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  .field textarea {
+    min-height: 140px;
+  }
+
+  .setting-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .setting-row input[type="checkbox"] {
+    align-self: flex-start;
+  }
+
+  .data-preview {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 430px) {
+  .app {
+    padding: 8px;
+  }
+
+  .brand {
+    margin-inline: -8px;
+  }
+
+  .sidebar-card {
+    margin-inline: -8px;
+  }
+
+  .topbar {
+    top: 62px;
+  }
+
+  .auth-actions,
+  .form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    display: grid;
+  }
+
+  .form-actions .button,
+  .form-actions .create-post {
+    width: 100%;
+  }
+
+  .post-head {
+    align-items: flex-start;
+  }
+
+  .follow {
+    min-height: 34px;
+    padding-inline: 11px;
+    font-size: 0.84rem;
+  }
+
+  .comment-thread.nested {
+    margin-left: 10px;
+    padding-left: 10px;
   }
 }
