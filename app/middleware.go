@@ -64,13 +64,13 @@ func SecureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csp := strings.Join([]string{
 			"default-src 'self';",
-			"script-src 'self';",
-			"script-src-elem 'self';",
+			"script-src 'self' https://static.cloudflareinsights.com;",
+			"script-src-elem 'self' https://static.cloudflareinsights.com;",
 			"style-src 'self' 'unsafe-inline';",
 			"style-src-elem 'self' 'unsafe-inline';",
 			"img-src 'self' data: blob: https:;",
 			"font-src 'self' data:;",
-			"connect-src 'self';",
+			"connect-src 'self' https://static.cloudflareinsights.com;",
 			"worker-src 'self' blob:;",
 			"object-src 'none';",
 			"frame-ancestors 'none';",

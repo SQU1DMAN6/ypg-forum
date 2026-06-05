@@ -749,23 +749,48 @@
     });
   }
 
+  function renderInitError(error) {
+    const app = document.getElementById("app");
+    if (!app) return;
+    app.innerHTML = "";
+    const panel = document.createElement("section");
+    panel.className = "content-panel error-panel";
+    const heading = document.createElement("h1");
+    heading.textContent = "Loading failed";
+    const message = document.createElement("p");
+    message.textContent = "YPG Forum could not finish starting. Please refresh the page or disable browser extensions that block scripts.";
+    const details = document.createElement("pre");
+    details.className = "debug-message";
+    details.textContent = String(error?.message || error || "Unknown error");
+    panel.append(heading, message, details);
+    app.append(panel);
+  }
+
   async function init() {
     attachGlobalDebugHandlers();
-    if (store.ready) await store.ready();
     const app = document.getElementById("app");
-    const page = app.dataset.page || "home";
-    if (page === "home") renderFeedPage({ mode: "home" });
-    if (page === "following") renderFeedPage({ mode: "following" });
-    if (page === "topic") renderFeedPage({ mode: "topic", topicId: app.dataset.topic || params().get("id") || "metaphysics" });
-    if (page === "create") renderCreatePost();
-    if (page === "profile") renderProfile();
-    if (page === "settings") renderSettings();
-    if (page === "account") renderAccount();
-    if (page === "user") renderUserProfile();
-    if (page === "messages") renderMessages();
-    if (page === "signin") renderSignin();
-    if (page === "signup") renderSignup();
-    if (page === "post") renderPostPage();
+    if (app) {
+      app.textContent = "Loading YPG Forum…";
+    }
+    try {
+      if (store.ready) await store.ready();
+      const page = app.dataset.page || "home";
+      if (page === "home") renderFeedPage({ mode: "home" });
+      if (page === "following") renderFeedPage({ mode: "following" });
+      if (page === "topic") renderFeedPage({ mode: "topic", topicId: app.dataset.topic || params().get("id") || "metaphysics" });
+      if (page === "create") renderCreatePost();
+      if (page === "profile") renderProfile();
+      if (page === "settings") renderSettings();
+      if (page === "account") renderAccount();
+      if (page === "user") renderUserProfile();
+      if (page === "messages") renderMessages();
+      if (page === "signin") renderSignin();
+      if (page === "signup") renderSignup();
+      if (page === "post") renderPostPage();
+    } catch (error) {
+      console.error("[YPG Runtime] init failed", error);
+      renderInitError(error);
+    }
   }
 
   document.addEventListener("DOMContentLoaded", init);
