@@ -1,5 +1,15 @@
 (function () {
   const jsonHeaders = { "Content-Type": "application/json" };
+  const debugPrefix = "[YPG API]";
+
+  function debug(...args) {
+    console.debug(debugPrefix, ...args);
+  }
+
+  function isBlockedError(error) {
+    const message = error?.message || "";
+    return /ERR_BLOCKED_BY_CLIENT|blocked|adblock|abp|client.*block/i.test(message);
+  }
 
   async function request(path, options = {}) {
     const requestInit = {
@@ -11,7 +21,32 @@
     } else {
       requestInit.headers = { ...jsonHeaders, ...(options.headers || {}) };
     }
-    const response = await fetch(path, requestInit);
+    let response;
+    try {
+      debug("request", requestInit.method || "GET", path, {
+        credentials: requestInit.credentials,
+        hasBody: Boolean(requestInit.body),
+        bodyType: requestInit.body ? Object.prototype.toString.call(requestInit.body) : "none"
+      });
+      response = await fetch(path, requestInit);
+    } catch (error) {
+      const blocked = isBlockedError(error);
+      const online = typeof navigator !== "undefined" ? navigator.onLine : "unknown";
+      const hint = blocked ? " Possible client-side blocker detected." : "";
+      const failure = new Error(`YPG API network error: ${path} (${error.name}: ${error.message})${hint} online=${online}`);
+      failure.originalError = error;
+      failure.blockedByClient = blocked;
+      console.warn(debugPrefix, "network failure", {
+        path,
+        method: requestInit.method || "GET",
+        online,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+        blockedByClient: blocked,
+        error: error?.message || String(error)
+      });
+      throw failure;
+    }
+
     if (!response.ok) {
       let details = "";
       try {
@@ -23,7 +58,9 @@
           if (text) details = ` ${text}`;
         } catch (ignore) {}
       }
-      throw new Error(`YPG API ${response.status}: ${path}${details}`);
+      const statusMessage = `YPG API ${response.status}: ${path}${details}`;
+      console.warn(debugPrefix, "response failure", { path, status: response.status, details });
+      throw new Error(statusMessage);
     }
     return response.json();
   }

@@ -31,8 +31,15 @@
 
   function persist(path, payload) {
     if (!backendAvailable || !api || typeof path !== "function") return;
-    path(payload).catch(() => {
+    path(payload).catch((error) => {
       backendAvailable = false;
+      const blockedByClient = /ERR_BLOCKED_BY_CLIENT|blocked|adblock|abp|client.*block/i.test(error?.message || "");
+      console.warn("[YPG Store] backend sync failed, switching to offline mode", {
+        pathName: path.name || "unknown",
+        error: error?.message || String(error),
+        blockedByClient,
+        online: typeof navigator !== "undefined" ? navigator.onLine : "unknown"
+      });
     });
   }
 
@@ -61,8 +68,17 @@
         hydrateFromBackend(session.state, session.userId);
         write(keys.auth, { signedIn: session.signedIn === true, backend: true, localAccount: auth().localAccount || null });
       })
-      .catch(() => {
+      .catch((error) => {
         backendAvailable = false;
+        const online = typeof navigator !== "undefined" ? navigator.onLine : "unknown";
+        const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "unknown";
+        const blockedByClient = /ERR_BLOCKED_BY_CLIENT|blocked|adblock|abp|client.*block/i.test(error?.message || "");
+        console.warn("[YPG Store] backend unavailable during session load", {
+          error: error?.message || String(error),
+          blockedByClient,
+          online,
+          userAgent
+        });
         const currentAuth = auth();
         write(keys.auth, { signedIn: false, backend: false, localAccount: currentAuth.localAccount || null });
       }) : Promise.resolve();
@@ -79,6 +95,10 @@
 
   function isSignedIn() {
     return auth().signedIn !== false;
+  }
+
+  function isBackendAvailable() {
+    return backendAvailable;
   }
 
   function loginDemo(credentials = {}) {
@@ -182,7 +202,15 @@
       };
     }
     write(keys.votes, next);
-    if (api) api.toggleVote(postId, direction).catch(() => {});
+    if (api) api.toggleVote(postId, direction).catch((error) => {
+      backendAvailable = false;
+      console.warn("[YPG Store] vote sync failed", {
+        postId,
+        direction,
+        error: error?.message || String(error),
+        online: typeof navigator !== "undefined" ? navigator.onLine : "unknown"
+      });
+    });
   }
 
   function comments() {
@@ -194,12 +222,21 @@
   }
 
   async function addComment(postId, comment) {
-    if (api) {
-      const saved = await api.addComment(postId, comment);
-      const next = comments();
-      next[postId] = saved;
-      write(keys.comments, next);
-      return saved;
+    if (api && backendAvailable) {
+      try {
+        const saved = await api.addComment(postId, comment);
+        const next = comments();
+        next[postId] = saved;
+        write(keys.comments, next);
+        return saved;
+      } catch (error) {
+        backendAvailable = false;
+        console.warn("[YPG Store] comment sync failed, saving locally", {
+          postId,
+          error: error?.message || String(error),
+          online: typeof navigator !== "undefined" ? navigator.onLine : "unknown"
+        });
+      }
     }
     const next = comments();
     next[postId] = [...(next[postId] || []), { parentId: null, ...comment }];
@@ -352,6 +389,7 @@
     toggleVote,
     commentsForPost,
     addComment,
+    isBackendAvailable,
     commentCountFor,
     followersFor,
     followingUsers,

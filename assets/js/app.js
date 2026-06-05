@@ -5,6 +5,21 @@
   let currentPage = null;
   let currentTopicId = null;
 
+  function attachGlobalDebugHandlers() {
+    window.addEventListener("error", (event) => {
+      console.error("[YPG Runtime] uncaught error:", event.error || event.message, {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error?.stack
+      });
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      console.error("[YPG Runtime] unhandled promise rejection:", event.reason);
+    });
+  }
+
   function params() {
     return new URLSearchParams(window.location.search);
   }
@@ -735,6 +750,7 @@
   }
 
   async function init() {
+    attachGlobalDebugHandlers();
     if (store.ready) await store.ready();
     const app = document.getElementById("app");
     const page = app.dataset.page || "home";
