@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -56,7 +57,7 @@ func StatsMiddleware(next http.Handler) http.Handler {
 		rr := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rr, r)
 		elapsed := time.Since(start)
-		println("[stats]", r.Method, r.URL.Path, "status", rr.status, "bytes", rr.written, "elapsed", elapsed.String())
+		log.Printf("[stats] method=%s path=%s status=%d bytes=%d elapsed=%s remote=%s ua=%q", r.Method, r.URL.Path, rr.status, rr.written, elapsed.String(), r.RemoteAddr, r.UserAgent())
 	})
 }
 
@@ -64,13 +65,13 @@ func SecureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csp := strings.Join([]string{
 			"default-src 'self';",
-			"script-src 'self' https://static.cloudflareinsights.com;",
-			"script-src-elem 'self' https://static.cloudflareinsights.com;",
+			"script-src 'self';",
+			"script-src-elem 'self';",
 			"style-src 'self' 'unsafe-inline';",
 			"style-src-elem 'self' 'unsafe-inline';",
 			"img-src 'self' data: blob: https:;",
 			"font-src 'self' data:;",
-			"connect-src 'self' https://static.cloudflareinsights.com;",
+			"connect-src 'self';",
 			"worker-src 'self' blob:;",
 			"object-src 'none';",
 			"frame-ancestors 'none';",
@@ -92,7 +93,7 @@ func SecureHeaders(next http.Handler) http.Handler {
 func RequestBodyLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > 0 {
-			println("[req]", r.Method, r.URL.String(), "body len", r.ContentLength)
+			log.Printf("[req] method=%s url=%s body_bytes=%d", r.Method, r.URL.String(), r.ContentLength)
 		}
 		next.ServeHTTP(w, r)
 	})

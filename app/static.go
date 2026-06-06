@@ -1,14 +1,16 @@
 package app
 
 import (
+	"fmt"
+	tmpl "html/template"
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
-	"regexp"
-	tmpl "html/template"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -28,6 +30,7 @@ func RegisterStatic(r *chi.Mux) {
 		fs := http.FileServer(http.Dir(path))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			log.Printf("[static] %s %s -> %s", r.Method, r.URL.Path, path)
 			fs.ServeHTTP(w, r)
 		})
 	}
@@ -42,24 +45,10 @@ func ServeHTMLPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := projectRoot(workDir)
-	path := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/"))
-	if path == "." || path == "" {
-		path = "index.html"
-	}
-	if strings.HasPrefix(path, "..") || strings.HasPrefix(path, "data/") || path == "database.db" || path == "go.mod" || path == "go.sum" {
+	filename, page, ok := resolveHTMLPage(root, r.URL.Path)
+	if !ok {
 		http.NotFound(w, r)
 		return
-	}
-	if filepath.Ext(path) != ".html" {
-		http.NotFound(w, r)
-		return
-	}
-	filename := filepath.Join(root, path)
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		filename = filepath.Join(root, "view", "template", "themes", path)
-	}
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		filename = filepath.Join(root, "themes", path)
 	}
 	body, err := os.ReadFile(filename)
 	if err != nil {
@@ -78,7 +67,49 @@ func ServeHTMLPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	log.Printf("[html] %s %s -> %s", r.Method, r.URL.Path, page)
 	_, _ = w.Write(enhanced)
+}
+
+func resolveHTMLPage(root, requestPath string) (filename string, page string, ok bool) {
+	cleaned := strings.TrimPrefix(path.Clean("/"+requestPath), "/")
+	if cleaned == "" || cleaned == "." {
+		cleaned = "index"
+	}
+	if strings.HasPrefix(cleaned, "api/") || strings.HasPrefix(cleaned, "assets/") || strings.HasPrefix(cleaned, "ypg/") {
+		return "", "", false
+	}
+
+	ext := path.Ext(cleaned)
+	if ext == "" {
+		cleaned += ".html"
+	} else if ext != ".html" {
+		return "", "", false
+	}
+
+	blocked := map[string]bool{
+		"database.db": true,
+		"go.mod":      true,
+		"go.sum":      true,
+	}
+	if blocked[cleaned] || strings.HasPrefix(cleaned, "data/") || strings.Contains(cleaned, "../") {
+		return "", "", false
+	}
+
+	rel := filepath.FromSlash(cleaned)
+	candidates := []string{
+		filepath.Join(root, rel),
+		filepath.Join(root, "view", "template", "themes", rel),
+		filepath.Join(root, "themes", rel),
+	}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() {
+			return candidate, cleaned, true
+		}
+	}
+	log.Printf("[html] no page for %q; tried %s", requestPath, strings.Join(candidates, ", "))
+	return "", "", false
 }
 
 // injectServerShell returns HTML with a server-rendered fallback injected
@@ -109,7 +140,7 @@ func injectServerShell(body []byte, r *http.Request) ([]byte, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString("<div id=\"app\">\n  <main class=\"main noscript-main\">\n    <header><h1>Young Philosophers Forum</h1></header>\n    <section class=\"content-panel\">\n      <h2>Topics</h2>\n      <ul class=\"topic-list-noscript\">\n")
+	b.WriteString("\n  <main class=\"main noscript-main\">\n    <header><h1>Young Philosophers Forum</h1></header>\n    <section class=\"content-panel\">\n      <h2>Topics</h2>\n      <ul class=\"topic-list-noscript\">\n")
 	for _, t := range topics {
 		b.WriteString("        <li><a href=\"")
 		b.WriteString(tmpl.HTMLEscapeString(t.ID))
@@ -117,10 +148,10 @@ func injectServerShell(body []byte, r *http.Request) ([]byte, error) {
 		b.WriteString(tmpl.HTMLEscapeString(t.Label))
 		b.WriteString("</a></li>\n")
 	}
-	b.WriteString("      </ul>\n      <p class=\"quiet\">This is a lightweight fallback view. Enable JavaScript for full functionality.</p>\n    </section>\n  </main>\n</div>")
+	b.WriteString("      </ul>\n      <p class=\"quiet\">This is a lightweight fallback view. Enable JavaScript for full functionality.</p>\n    </section>\n  </main>\n")
 
 	// Replace the matched #app content with our server shell.
-	out := re.ReplaceAll(body, []byte("${1}"+b.String()+"${3}"))
+	out := re.ReplaceAll(body, []byte(fmt.Sprintf("${1}%s${3}", b.String())))
 	return out, nil
 }
 

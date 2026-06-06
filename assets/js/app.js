@@ -4,19 +4,36 @@
   const render = window.YPGRender;
   let currentPage = null;
   let currentTopicId = null;
+  const runtimePrefix = "[YPG Runtime]";
+
+  function debug(...args) {
+    console.debug(runtimePrefix, ...args);
+  }
 
   function attachGlobalDebugHandlers() {
+    if (window.__YPG_RUNTIME_DEBUG_ATTACHED__) return;
+    window.__YPG_RUNTIME_DEBUG_ATTACHED__ = true;
+
     window.addEventListener("error", (event) => {
-      console.error("[YPG Runtime] uncaught error:", event.error || event.message, {
+      const target = event.target;
+      if (target && target !== window && (target.src || target.href)) {
+        console.warn(runtimePrefix, "resource failed to load", {
+          tag: target.tagName,
+          url: target.src || target.href,
+          page: window.location.pathname
+        });
+        return;
+      }
+      console.error(runtimePrefix, "uncaught error:", event.error || event.message, {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
         stack: event.error?.stack
       });
-    });
+    }, true);
 
     window.addEventListener("unhandledrejection", (event) => {
-      console.error("[YPG Runtime] unhandled promise rejection:", event.reason);
+      console.error(runtimePrefix, "unhandled promise rejection:", event.reason);
     });
   }
 
@@ -781,7 +798,7 @@
     const heading = document.createElement("h1");
     heading.textContent = "Loading failed";
     const message = document.createElement("p");
-    message.textContent = "YPG Forum could not finish starting. Please refresh the page or disable browser extensions that block scripts.";
+    message.textContent = "YPG Forum could not finish starting. Please refresh the page and check the browser console for YPG diagnostics.";
     const details = document.createElement("pre");
     details.className = "debug-message";
     details.textContent = String(error?.message || error || "Unknown error");
@@ -793,6 +810,18 @@
     attachGlobalDebugHandlers();
     const app = document.getElementById("app");
     const page = app ? app.dataset.page || "home" : "home";
+    debug("init start", {
+      path: window.location.pathname,
+      search: window.location.search,
+      page,
+      appFound: Boolean(app),
+      dependencies: {
+        data: Boolean(data),
+        store: Boolean(store),
+        render: Boolean(render)
+      },
+      dataset: app ? { ...app.dataset } : {}
+    });
 
     // Render a quick synchronous shell so users see the UI even if async startup
     // or external resources are blocked by extensions. This prevents a blank page.
@@ -801,14 +830,20 @@
       const pageContent = document.getElementById("page-content");
       if (pageContent) pageContent.innerHTML = '<div class="loading">Loading YPG Forum…</div>';
     } catch (err) {
-      console.warn("[YPG Runtime] initial shell render failed", err);
+      console.warn(runtimePrefix, "initial shell render failed", err);
     }
 
     try {
-      if (store.ready) await store.ready();
+      if (store.ready) {
+        await store.ready();
+        debug("store ready", {
+          backendAvailable: typeof store.isBackendAvailable === "function" ? store.isBackendAvailable() : "unknown",
+          signedIn: typeof store.isSignedIn === "function" ? store.isSignedIn() : "unknown"
+        });
+      }
       // If #app is not present in the DOM (e.g., blocked or embedded), abort page rendering.
       if (!app) {
-        console.warn("[YPG Runtime] #app element not found after startup — aborting page render.");
+        console.warn(runtimePrefix, "#app element not found after startup - aborting page render.");
         return;
       }
       // Show a diagnostic hint if the previous session load detected client-side blocking
@@ -819,6 +854,10 @@
         }
       } catch (e) {}
       const nowPage = app.dataset.page || "home";
+      debug("render route", {
+        page: nowPage,
+        topic: app.dataset.topic || params().get("id") || null
+      });
       if (nowPage === "home") renderFeedPage({ mode: "home" });
       if (nowPage === "following") renderFeedPage({ mode: "following" });
       if (nowPage === "topic") renderFeedPage({ mode: "topic", topicId: app.dataset.topic || params().get("id") || "metaphysics" });
@@ -832,10 +871,13 @@
       if (nowPage === "signup") renderSignup();
       if (nowPage === "post") renderPostPage();
     } catch (error) {
-      console.error("[YPG Runtime] init failed", error);
+      console.error(runtimePrefix, "init failed", error);
       renderInitError(error);
     }
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", () => {
+    debug("DOMContentLoaded");
+    init();
+  });
 })();
