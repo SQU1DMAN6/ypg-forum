@@ -260,6 +260,10 @@
 
   function shell(options) {
     const app = document.getElementById("app");
+    if (!app) {
+      console.warn("[YPG Render] shell called but #app not found. Aborting shell render.");
+      return;
+    }
     app.innerHTML = `
       <div class="app">
         ${sidebar(options.activeTopicId, options.activePage)}

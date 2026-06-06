@@ -79,8 +79,8 @@
           online,
           userAgent
         });
-        const currentAuth = auth();
-        write(keys.auth, { signedIn: false, backend: false, localAccount: currentAuth.localAccount || null });
+          const currentAuth = auth();
+          write(keys.auth, { signedIn: false, backend: false, blockedByClient: blockedByClient, localAccount: currentAuth.localAccount || null });
       }) : Promise.resolve();
     return readyPromise;
   }

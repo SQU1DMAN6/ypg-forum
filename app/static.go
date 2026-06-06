@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"regexp"
+	tmpl "html/template"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -64,8 +66,62 @@ func ServeHTMLPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+
+	// Attempt to provide a minimal server-side-rendered shell inside the
+	// <div id="app"> container so pages are usable when JavaScript is
+	// blocked. We perform a safe string replacement rather than full
+	// templating to keep changes minimal.
+	enhanced, err := injectServerShell(body, r)
+	if err != nil {
+		// If the injection fails, fall back to the original body.
+		enhanced = body
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(body)
+	_, _ = w.Write(enhanced)
+}
+
+// injectServerShell returns HTML with a server-rendered fallback injected
+// into the #app container. This provides a progressive enhancement so that
+// critical navigation and a small topic list are visible when JavaScript is
+// unavailable or blocked by extensions.
+func injectServerShell(body []byte, r *http.Request) ([]byte, error) {
+	// Conservative regex to locate the opening <div id="app" ...> and its
+	// closing tag. Use (?s) so '.' matches newlines. Do not be greedy.
+	re := regexp.MustCompile(`(?s)(<div\s+id=\"app\"[^>]*>)(.*?)(</div>)`)
+	if !re.Match(body) {
+		return body, nil
+	}
+
+	// Build a minimal HTML shell showing navigation and topics.
+	topics := []struct{
+		ID string
+		Label string
+	}{
+		{"metaphysics", "Metaphysics"},
+		{"ethics", "Ethics"},
+		{"logic", "Logic"},
+		{"aesthetics", "Aesthetics"},
+		{"epistemology", "Epistemology"},
+		{"politics", "Politics"},
+		{"mind", "Mind"},
+		{"religion", "Religion"},
+	}
+
+	var b strings.Builder
+	b.WriteString("<div id=\"app\">\n  <main class=\"main noscript-main\">\n    <header><h1>Young Philosophers Forum</h1></header>\n    <section class=\"content-panel\">\n      <h2>Topics</h2>\n      <ul class=\"topic-list-noscript\">\n")
+	for _, t := range topics {
+		b.WriteString("        <li><a href=\"")
+		b.WriteString(tmpl.HTMLEscapeString(t.ID))
+		b.WriteString(".html\">")
+		b.WriteString(tmpl.HTMLEscapeString(t.Label))
+		b.WriteString("</a></li>\n")
+	}
+	b.WriteString("      </ul>\n      <p class=\"quiet\">This is a lightweight fallback view. Enable JavaScript for full functionality.</p>\n    </section>\n  </main>\n</div>")
+
+	// Replace the matched #app content with our server shell.
+	out := re.ReplaceAll(body, []byte("${1}"+b.String()+"${3}"))
+	return out, nil
 }
 
 func checkDirExists(path string, name string) {

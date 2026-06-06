@@ -20,6 +20,29 @@
     });
   }
 
+  function showBlockedHint() {
+    try {
+      if (localStorage.getItem("ypg-forum:block-hint-hidden")) return;
+      const banner = document.createElement("div");
+      banner.className = "ypg-block-hint";
+      banner.innerHTML = `<div style="max-width:980px;margin:0 auto;">Third-party scripts or analytics appear to be blocked by a browser extension. This can interfere with features and diagnostics. <button id="ypg-hide-block-hint" style="margin-left:12px;padding:6px 10px">Dismiss</button></div>`;
+      banner.style.position = "fixed";
+      banner.style.top = "0";
+      banner.style.left = "0";
+      banner.style.right = "0";
+      banner.style.background = "#fff3cd";
+      banner.style.color = "#856404";
+      banner.style.padding = "10px";
+      banner.style.zIndex = "9999";
+      banner.style.borderBottom = "1px solid #ffeeba";
+      banner.style.textAlign = "center";
+      document.body.insertBefore(banner, document.body.firstChild);
+      document.getElementById("ypg-hide-block-hint").addEventListener("click", () => {
+        try { banner.remove(); localStorage.setItem("ypg-forum:block-hint-hidden", "1"); } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
   function params() {
     return new URLSearchParams(window.location.search);
   }
@@ -769,24 +792,45 @@
   async function init() {
     attachGlobalDebugHandlers();
     const app = document.getElementById("app");
-    if (app) {
-      app.textContent = "Loading YPG Forum…";
+    const page = app ? app.dataset.page || "home" : "home";
+
+    // Render a quick synchronous shell so users see the UI even if async startup
+    // or external resources are blocked by extensions. This prevents a blank page.
+    try {
+      render.shell({ activePage: page, title: "", description: "", searchPlaceholder: "Loading…" });
+      const pageContent = document.getElementById("page-content");
+      if (pageContent) pageContent.innerHTML = '<div class="loading">Loading YPG Forum…</div>';
+    } catch (err) {
+      console.warn("[YPG Runtime] initial shell render failed", err);
     }
+
     try {
       if (store.ready) await store.ready();
-      const page = app.dataset.page || "home";
-      if (page === "home") renderFeedPage({ mode: "home" });
-      if (page === "following") renderFeedPage({ mode: "following" });
-      if (page === "topic") renderFeedPage({ mode: "topic", topicId: app.dataset.topic || params().get("id") || "metaphysics" });
-      if (page === "create") renderCreatePost();
-      if (page === "profile") renderProfile();
-      if (page === "settings") renderSettings();
-      if (page === "account") renderAccount();
-      if (page === "user") renderUserProfile();
-      if (page === "messages") renderMessages();
-      if (page === "signin") renderSignin();
-      if (page === "signup") renderSignup();
-      if (page === "post") renderPostPage();
+      // If #app is not present in the DOM (e.g., blocked or embedded), abort page rendering.
+      if (!app) {
+        console.warn("[YPG Runtime] #app element not found after startup — aborting page render.");
+        return;
+      }
+      // Show a diagnostic hint if the previous session load detected client-side blocking
+      try {
+        const authState = store.auth();
+        if (authState && authState.blockedByClient) {
+          showBlockedHint();
+        }
+      } catch (e) {}
+      const nowPage = app.dataset.page || "home";
+      if (nowPage === "home") renderFeedPage({ mode: "home" });
+      if (nowPage === "following") renderFeedPage({ mode: "following" });
+      if (nowPage === "topic") renderFeedPage({ mode: "topic", topicId: app.dataset.topic || params().get("id") || "metaphysics" });
+      if (nowPage === "create") renderCreatePost();
+      if (nowPage === "profile") renderProfile();
+      if (nowPage === "settings") renderSettings();
+      if (nowPage === "account") renderAccount();
+      if (nowPage === "user") renderUserProfile();
+      if (nowPage === "messages") renderMessages();
+      if (nowPage === "signin") renderSignin();
+      if (nowPage === "signup") renderSignup();
+      if (nowPage === "post") renderPostPage();
     } catch (error) {
       console.error("[YPG Runtime] init failed", error);
       renderInitError(error);
