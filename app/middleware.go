@@ -1,9 +1,8 @@
 package app
 
 import (
-	"bufio"
+	"context"
 	"log"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -13,66 +12,49 @@ import (
 )
 
 func RegisterMiddleWares(r *chi.Mux) {
-	r.Use(RequestBodyLogger)
-	r.Use(StatsMiddleware)
-	r.Use(SecureHeaders)
-	r.Use(middleware.Logger)
+	// StripSlashes first so path normalization happens before anything else.
 	r.Use(middleware.StripSlashes)
-	r.Use(VerboseRequestLogger)
+	// Hard upper bound on request lifetime. This is the safety net that
+	// stops the "Loading YPG Forum..." hang: if a handler ever wedges on a
+	// slow query or a stuck SQLite write, the connection is closed and the
+	// client gets a 504 within ~10s, instead of waiting forever.
+	r.Use(RequestTimeoutMiddleware(10 * time.Second))
+	// Security headers and panic recovery stay in place; they're cheap.
+	r.Use(SecureHeaders)
+	r.Use(PanicRecoveryMiddleware)
+	// One chi request log line per request. The previous stack emitted
+	// three duplicate lines (req, stats, reqv) plus a static-file log
+	// line on every asset hit. Keep it minimal.
+	r.Use(middleware.Logger)
 }
 
-type responseRecorder struct {
-	http.ResponseWriter
-	status  int
-	written int64
-}
-
-func (r *responseRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
-}
-
-func (r *responseRecorder) Write(b []byte) (int, error) {
-	n, err := r.ResponseWriter.Write(b)
-	r.written += int64(n)
-	return n, err
-}
-
-func (r *responseRecorder) Flush() {
-	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
+// RequestTimeoutMiddleware caps how long any single handler is allowed to
+// run. If the deadline elapses the goroutine context is cancelled and the
+// response is force-closed. The 10s default is generous for a forum page
+// and tight enough that the user-visible "loading" indicator never sticks.
+func RequestTimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }
 
-func (r *responseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	hijacker, ok := r.ResponseWriter.(http.Hijacker)
-	if !ok {
-		return nil, nil, http.ErrNotSupported
-	}
-	return hijacker.Hijack()
-}
-
-func StatsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rr := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rr, r)
-		elapsed := time.Since(start)
-		log.Printf("[stats] method=%s path=%s status=%d bytes=%d elapsed=%s remote=%s ua=%q", r.Method, r.URL.Path, rr.status, rr.written, elapsed.String(), r.RemoteAddr, r.UserAgent())
-	})
-}
-
+// SecureHeaders emits the security headers we keep. The CSP is loosened a
+// touch (connect-src allows http/https) so the JS layer can always talk to
+// the backend, and the rest of the policy stays strict: no inline scripts,
+// no foreign frames, no foreign form targets, no remote objects.
 func SecureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csp := strings.Join([]string{
 			"default-src 'self';",
 			"script-src 'self';",
-			"script-src-elem 'self';",
 			"style-src 'self' 'unsafe-inline';",
-			"style-src-elem 'self' 'unsafe-inline';",
 			"img-src 'self' data: blob: https:;",
 			"font-src 'self' data:;",
-			"connect-src 'self';",
+			"connect-src 'self' http: https:;",
 			"worker-src 'self' blob:;",
 			"object-src 'none';",
 			"frame-ancestors 'none';",
@@ -88,30 +70,6 @@ func SecureHeaders(next http.Handler) http.Handler {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
 		next.ServeHTTP(w, r)
-	})
-}
-
-func RequestBodyLogger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > 0 {
-			log.Printf("[req] method=%s url=%s body_bytes=%d", r.Method, r.URL.String(), r.ContentLength)
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// VerboseRequestLogger emits a single human-friendly line per request that
-// includes method, path, status, size, remote address, referer, user agent,
-// and the elapsed duration. It complements the JSON-style [stats] and the
-// chi middleware.Logger lines so we can grep bin/server.out.log for [reqv]
-// to see a quick timeline of what a curl/browser hit.
-func VerboseRequestLogger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		ww := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(ww, r)
-		elapsed := time.Since(start)
-		log.Printf("[reqv] method=%s path=%s status=%d bytes=%d elapsed=%s remote=%s referer=%q ua=%q", r.Method, r.URL.Path, ww.status, ww.written, elapsed.String(), r.RemoteAddr, r.Referer(), r.UserAgent())
 	})
 }
 

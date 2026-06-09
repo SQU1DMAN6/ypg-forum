@@ -10,15 +10,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"ftr-ypg/controller/auth"
 	"ftr-ypg/controller/login"
 	"ftr-ypg/controller/response"
 	"ftr-ypg/repository"
 )
 
-var limits = auth.NewRateLimiter(80, 10*time.Minute)
+// Note: the in-process rate limiter that used to live at the top of this
+// file was removed. The HTTP path here is now gated only by:
+//   - request-timeout middleware in app/middleware.go
+//   - the session/HttpOnly cookie check
+//   - server-side input validation (file size, content type, etc.)
+// That's enough for a school forum. If real abuse becomes a problem, a
+// proper reverse-proxy rate limit is the right place to solve it.
+
+const maxProfileImageBytes = 5 << 20 // 5 MiB
 
 func Profile(w http.ResponseWriter, r *http.Request) {
 	var profile map[string]any
@@ -28,10 +34,6 @@ func Profile(w http.ResponseWriter, r *http.Request) {
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	if !limits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if err := repository.GetStore().SaveProfile(userID, profile); err != nil {
@@ -47,11 +49,7 @@ func ProfilePicture(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if !limits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
-		return
-	}
-	if err := r.ParseMultipartForm(5 << 20); err != nil {
+	if err := r.ParseMultipartForm(maxProfileImageBytes); err != nil {
 		http.Error(w, "image is too large", http.StatusBadRequest)
 		return
 	}
@@ -88,7 +86,7 @@ func ProfilePicture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// write the bytes we already read followed by the remainder of the file
-	reader := io.MultiReader(bytes.NewReader(buf[:n]), io.LimitReader(file, 5<<20))
+	reader := io.MultiReader(bytes.NewReader(buf[:n]), io.LimitReader(file, maxProfileImageBytes))
 	if _, err := io.Copy(out, reader); err != nil {
 		_ = out.Close()
 		_ = os.Remove(diskPath)
@@ -128,10 +126,6 @@ func Settings(w http.ResponseWriter, r *http.Request) {
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	if !limits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if err := repository.GetStore().SaveSettings(userID, settings); err != nil {

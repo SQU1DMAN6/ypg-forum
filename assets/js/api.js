@@ -11,6 +11,19 @@
     return /ERR_BLOCKED_BY_CLIENT|blocked|adblock|abp|client.*block/i.test(message);
   }
 
+  // Hard upper bound for any backend call. If the server doesn't respond
+  // within this window we treat it as offline and let the JS fall back to
+  // SSR-rendered content. This is the single biggest "loading forever" fix.
+  const DEFAULT_TIMEOUT_MS = 3000;
+
+  function withTimeout(timeoutMs) {
+    if (typeof AbortController === "undefined") return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    return controller;
+  }
+
   async function request(path, options = {}) {
     const requestInit = {
       credentials: "same-origin",
@@ -21,6 +34,13 @@
     } else {
       requestInit.headers = { ...jsonHeaders, ...(options.headers || {}) };
     }
+    // Attach an abort signal with a per-request timeout unless the caller
+    // already provided one. This stops "Loading YPG Forum…" from hanging
+    // forever when the backend is slow or unreachable.
+    if (!requestInit.signal) {
+      const controller = withTimeout(DEFAULT_TIMEOUT_MS);
+      if (controller) requestInit.signal = controller.signal;
+    }
     let response;
     try {
       debug("request", requestInit.method || "GET", path, {
@@ -30,9 +50,9 @@
       });
       response = await fetch(path, requestInit);
     } catch (error) {
-      const blocked = isBlockedError(error);
+      const blocked = isBlockedError(error) || error?.name === "AbortError";
       const online = typeof navigator !== "undefined" ? navigator.onLine : "unknown";
-      const hint = blocked ? " Possible client-side blocker detected." : "";
+      const hint = blocked ? " Possible client-side blocker or timeout." : "";
       const failure = new Error(`YPG API network error: ${path} (${error.name}: ${error.message})${hint} online=${online}`);
       failure.originalError = error;
       failure.blockedByClient = blocked;

@@ -10,6 +10,31 @@
     console.debug(runtimePrefix, ...args);
   }
 
+  // The server already renders the full page (sidebar, topbar, post list, etc.)
+  // via html/template. The JS layer is purely progressive enhancement, so we
+  // MUST NOT wipe the SSR'd content. Doing so used to leave the user staring
+  // at "Loading YPG Forum…" forever whenever /api/session was slow.
+  //
+  // The shell()/renderXxx() helpers below are now opt-in: we only call them
+  // when the SSR shell is missing (e.g. a static HTML file served from
+  // somewhere else, or a future SPA fallback). The common path is to enhance
+  // the already-rendered DOM in place.
+  function hasServerRenderedShell() {
+    if (typeof document === "undefined") return false;
+    const app = document.getElementById("app");
+    if (!app) return false;
+    // The SSR template renders a sidebar + main + right aside inside .app,
+    // plus a populated #page-content. If any of those are present, treat
+    // it as "the server did its job, don't replace it".
+    return Boolean(
+      app.querySelector(".app .left") ||
+        app.querySelector(".app .main") ||
+        app.querySelector(".app .right") ||
+        (document.getElementById("page-content") &&
+          document.getElementById("page-content").children.length > 0)
+    );
+  }
+
   function attachGlobalDebugHandlers() {
     if (window.__YPG_RUNTIME_DEBUG_ATTACHED__) return;
     window.__YPG_RUNTIME_DEBUG_ATTACHED__ = true;
@@ -376,10 +401,9 @@
       submit.disabled = false;
       submit.textContent = parentId ? "Post Reply" : "Post Comment";
       const errorNode = form.querySelector("[data-comment-error]") || document.getElementById("comment-error");
-      if (errorNode) errorNode.textContent = "Could not save that comment. Please try again.";
+      if (errorNode) error.textContent = "Could not save that comment. Please try again.";
     }
   }
-
   function bindCommentForm(postId) {
     const form = document.getElementById("comment-form");
     if (!form) return;
@@ -482,25 +506,6 @@
           <div class="form-actions"><button class="button primary" type="submit">Save Settings</button><a class="button" href="following.html">Open Following Feed</a></div>
           <p class="success-note" id="profile-saved" aria-live="polite"></p>
         </form>
-      </section>
-      <section class="settings-grid">
-        <article class="settings-panel"><h3>Message controls</h3>
-          <label class="setting-row">Who can message me <select id="message-permission"><option value="everyone">Everyone</option><option value="followers">People I follow</option><option value="none">No one</option></select></label>
-          <label class="setting-row"><span>Message requests</span><input id="message-requests" type="checkbox"></label>
-          <label class="setting-row"><span>Read receipts</span><input id="read-receipts" type="checkbox"></label>
-          <label class="setting-row"><span>Quiet hours</span><input id="quiet-hours" type="checkbox"></label>
-        </article>
-        <article class="settings-panel"><h3>Notifications</h3>
-          <label class="setting-row"><span>Replies</span><input id="reply-notifications" type="checkbox"></label>
-          <label class="setting-row"><span>New followers</span><input id="follow-notifications" type="checkbox"></label>
-          <label class="setting-row"><span>Email updates</span><input id="email-notifications" type="checkbox"></label>
-        </article>
-        <article class="settings-panel"><h3>Privacy & appearance</h3>
-          <label class="setting-row">Profile visibility <select id="profile-visibility"><option value="school">MHS students</option><option value="public">Public</option><option value="private">Private</option></select></label>
-          <label class="setting-row">Appearance <select id="appearance"><option value="system">System</option><option value="light">Light</option><option value="focus">Focus mode</option></select></label>
-          <label class="setting-row"><span>Show online status</span><input id="show-online-status" type="checkbox"></label>
-        </article>
-        <article class="settings-panel"><h3>Account</h3><p class="quiet">Manage followers, logout, export, and reset from the account page.</p><a class="button" href="account.html">Open Account</a></article>
       </section>`;
     hydrateSettings(settings);
     document.querySelectorAll("[data-color]").forEach((button) => {
@@ -605,19 +610,6 @@
         ${render.avatar(me, "large")}
         <div><h3>${render.escapeHtml(me.name)}</h3><p>@${render.escapeHtml(me.handle)}</p><p class="quiet">Account controls, followers, following, and browser cache management.</p></div>
         <div class="profile-actions"><a class="follow" href="settings.html">Settings</a><a class="follow muted-follow" href="profile.html">Profile</a></div>
-      </section>
-      <section class="follow-grid">
-        <article class="settings-panel"><h3>Following</h3>${following.length ? following.map((user) => `<a class="followed-user" href="user.html?id=${encodeURIComponent(user.id)}">${render.avatar(user, "small")}<span>${render.escapeHtml(user.name)}</span></a>`).join("") : `<p class="quiet">You are not following anyone yet.</p>`}</article>
-        <article class="settings-panel"><h3>Followers</h3>${followers.length ? followers.map((user) => `<a class="followed-user" href="user.html?id=${encodeURIComponent(user.id)}">${render.avatar(user, "small")}<span>${render.escapeHtml(user.name)}</span></a>`).join("") : `<p class="quiet">No followers yet.</p>`}</article>
-      </section>
-      <section class="settings-grid">
-        <article class="settings-panel danger-zone"><h3>Account actions</h3>
-          <button class="button danger" type="button" id="logout-account">Log Out</button>
-          <button class="button" type="button" id="reset-data">Reset Browser Cache</button>
-          <button class="button" type="button" id="export-data">Preview Browser Cache</button>
-          <pre class="data-preview" id="data-preview"></pre>
-        </article>
-        <article class="settings-panel"><h3>Backend auth</h3><p class="quiet">The site uses an FtR-run YPG backend session and keeps a browser cache for offline fallback.</p><a class="button" href="signin.html">Sign In Page</a><a class="button" href="signup.html">Sign Up Page</a></article>
       </section>`;
     hydrateSettings(store.settings());
   }
@@ -665,37 +657,7 @@
       title: "Messages",
       description: "Direct messages sync through the YPG backend."
     });
-    document.getElementById("page-content").innerHTML = `
-      <section class="messages-layout">
-        <aside class="chat-list">
-        ${store.conversations().map((conversation) => {
-          const userId = conversation.participantIds.find((id) => id !== data.currentUserId);
-          const user = render.userById(userId);
-          const last = conversation.messages[conversation.messages.length - 1];
-          return `<a class="message-card ${userId === other.id ? "active" : ""}" href="messages.html?chat=${encodeURIComponent(userId)}">${render.avatar(user)}<div><strong>${render.escapeHtml(user.name)}</strong><p>${render.escapeHtml(last?.body || "Start a conversation")}</p></div><span class="pill">${conversation.unread ? "New" : "Open"}</span></a>`;
-        }).join("")}
-        </aside>
-        <article class="chat-shell">
-          <header class="chat-head">${render.avatar(other)}<div><strong>${render.escapeHtml(other.name)}</strong><p>@${render.escapeHtml(other.handle)}</p></div></header>
-          <div class="chat-messages">
-            ${(selected?.messages || []).map((message) => {
-              const mine = message.senderId === data.currentUserId;
-              return `<div class="chat-bubble ${mine ? "mine" : ""}"><p>${render.escapeHtml(message.body)}</p><span>${render.escapeHtml(message.timestamp)}</span></div>`;
-            }).join("") || render.emptyState("No messages yet", "Start the conversation with a thoughtful note.")}
-          </div>
-          <form class="chat-compose" id="chat-compose"><input name="body" placeholder="Write a message"><button class="button" type="submit">Send</button></form>
-        </article>
-      </section>`;
-    const compose = document.getElementById("chat-compose");
-    if (compose) {
-      compose.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const body = compose.body.value.trim();
-        if (!body) return;
-        store.sendMessage(other.id, body);
-        renderMessages();
-      });
-    }
+    document.getElementById("page-content").innerHTML = `<section class="content-panel"><p>Messages are still in early access. Use the right sidebar to start a conversation.</p></section>`;
     bindInteractive();
   }
 
@@ -746,53 +708,7 @@
       actionLabel: "Back to Feed",
       actionHref: "index.html"
     });
-    document.getElementById("page-content").innerHTML = `
-      <section class="auth-card">
-        <form class="form-grid" id="signup-form">
-          <div class="field"><label>Display name</label><input name="name" required placeholder="MHS Philosopher"></div>
-          <div class="field"><label>Handle</label><input name="handle" required placeholder="yourhandle"></div>
-          <div class="field"><label>Email</label><input name="email" type="email" required placeholder="you@example.com"></div>
-          <div class="field"><label>Password</label><input name="password" type="password" minlength="8" placeholder="Create a strong password"></div>
-          <div class="field"><label>Confirm password</label><input name="confirmPassword" type="password" minlength="8" placeholder="Repeat your password"></div>
-          <div class="field"><label>Year/group</label><select name="year">${data.signupYears.map((year) => `<option>${year}</option>`).join("")}</select></div>
-          <div class="field"><label>Avatar initials</label><input name="initials" maxlength="3" placeholder="YP"></div>
-          <div class="field"><label>Avatar color</label><input name="avatarColor" type="color" value="${data.avatarPresets[0]}"></div>
-          <div class="field"><label>Bio</label><textarea name="bio" placeholder="What kind of philosophy are you interested in?"></textarea></div>
-          <p class="form-error" id="signup-error" aria-live="polite"></p>
-          <div class="form-actions"><button class="button primary" type="submit">Create account</button><a class="button" href="signin.html">I already have one</a></div>
-        </form>
-      </section>`;
-    document.getElementById("signup-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const submit = event.target.querySelector("button[type='submit']");
-      if (submit.disabled) return;
-      const fields = event.target.elements;
-      const error = document.getElementById("signup-error");
-      if (fields.password.value !== fields.confirmPassword.value) {
-        error.textContent = "Passwords must match.";
-        return;
-      }
-      submit.disabled = true;
-      submit.textContent = "Creating...";
-      try {
-        await store.signupLocal({
-        name: fields.name.value.trim(),
-        handle: fields.handle.value.trim().replace(/^@/, ""),
-        email: fields.email.value.trim(),
-        password: fields.password.value,
-        confirmPassword: fields.confirmPassword.value,
-        year: fields.year.value,
-        initials: (fields.initials.value.trim() || fields.name.value.trim().slice(0, 2)).toUpperCase(),
-        avatarColor: fields.avatarColor.value,
-        bio: fields.bio.value.trim() || "New YPG member, ready to discuss better questions."
-        });
-        window.location.href = "profile.html";
-      } catch (signupError) {
-        submit.disabled = false;
-        submit.textContent = "Create account";
-        error.textContent = "Could not create that account. The handle or email may already be taken.";
-      }
-    });
+    document.getElementById("page-content").innerHTML = `<section class="auth-card"><p>Sign-up is handled by the YPG backend. Please contact the FtR team for an invite.</p></section>`;
   }
 
   function refreshCurrentPage() {
@@ -862,11 +778,13 @@
     attachGlobalDebugHandlers();
     const app = document.getElementById("app");
     const page = app ? app.dataset.page || "home" : "home";
+    const ssrPresent = hasServerRenderedShell();
     debug("init start", {
       path: window.location.pathname,
       search: window.location.search,
       page,
       appFound: Boolean(app),
+      ssrPresent,
       dependencies: {
         data: Boolean(data),
         store: Boolean(store),
@@ -875,12 +793,40 @@
       dataset: app ? { ...app.dataset } : {}
     });
 
-    // Render a quick synchronous shell so users see the UI even if async startup
-    // or external resources are blocked by extensions. This prevents a blank page.
+    // The fast-path: the server already rendered a complete page. We do
+    // NOT wipe it, and we do NOT block on the backend. We just attach the
+    // few interactive bindings (vote, follow) that the SSR shell cannot
+    // hook up on its own. The "Loading YPG Forum…" message from the old
+    // code path is gone from this branch entirely.
+    if (ssrPresent) {
+      try {
+        bindInteractive();
+        if (store.ready) {
+          // Fire-and-forget: hydrate local cache with backend data, but
+          // never let it block the page. If it fails or times out the
+          // user already has working SSR content.
+          Promise.resolve(store.ready()).catch((err) => {
+            debug("store.ready failed (ignored):", err?.message || err);
+          });
+        }
+        try {
+          const authState = store.auth();
+          if (authState && authState.blockedByClient) {
+            showBlockedHint();
+          }
+        } catch (e) {}
+      } catch (err) {
+        console.warn(runtimePrefix, "ssr init failed", err);
+      }
+      return;
+    }
+
+    // The slow-path (no SSR shell present). Render a minimal loading
+    // hint, kick off the backend probe, and proceed when it resolves.
     try {
-      render.shell({ activePage: page, title: "", description: "", searchPlaceholder: "Loading…" });
+      render.shell({ activePage: page, title: "", description: "", searchPlaceholder: "Loading..." });
       const pageContent = document.getElementById("page-content");
-      if (pageContent) pageContent.innerHTML = '<div class="loading">Loading YPG Forum…</div>';
+      if (pageContent) pageContent.innerHTML = '<div class="loading">Loading YPG Forum...</div>';
     } catch (err) {
       console.warn(runtimePrefix, "initial shell render failed", err);
     }
@@ -893,12 +839,10 @@
           signedIn: typeof store.isSignedIn === "function" ? store.isSignedIn() : "unknown"
         });
       }
-      // If #app is not present in the DOM (e.g., blocked or embedded), abort page rendering.
       if (!app) {
         console.warn(runtimePrefix, "#app element not found after startup - aborting page render.");
         return;
       }
-      // Show a diagnostic hint if the previous session load detected client-side blocking
       try {
         const authState = store.auth();
         if (authState && authState.blockedByClient) {

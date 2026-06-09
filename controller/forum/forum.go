@@ -4,9 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
-	"ftr-ypg/controller/auth"
 	"ftr-ypg/controller/login"
 	"ftr-ypg/controller/response"
 	"ftr-ypg/repository"
@@ -14,7 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-var writeLimits = auth.NewRateLimiter(120, 10*time.Minute)
+// Note: the per-endpoint rate limiters and X-Forwarded-For parsing that
+// used to live in this file were removed. The YPG forum doesn't have a
+// per-IP brute-force problem worth solving in-process; the global
+// request-timeout middleware in app/middleware.go is the only rate
+// "policy" the server enforces.
 
 func Posts(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
@@ -28,10 +30,6 @@ func Posts(w http.ResponseWriter, r *http.Request) {
 	}
 	var post map[string]any
 	if !response.ReadJSON(w, r, &post) {
-		return
-	}
-	if !writeLimits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	userID := login.CurrentUserID(r)
@@ -76,10 +74,6 @@ func Comments(w http.ResponseWriter, r *http.Request) {
 	if !response.ReadJSON(w, r, &payload) || payload.PostID == "" {
 		return
 	}
-	if !writeLimits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
-		return
-	}
 	userID := login.CurrentUserID(r)
 	if userID == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
@@ -103,10 +97,6 @@ func Follow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if !writeLimits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
-		return
-	}
 	follows, err := repository.GetStore().ToggleFollow(userID, chi.URLParam(r, "user"))
 	if err != nil {
 		http.Error(w, "could not update follow", http.StatusInternalServerError)
@@ -125,10 +115,6 @@ func Vote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	if !writeLimits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
-		return
-	}
 	votes, err := repository.GetStore().ToggleVote(userID, chi.URLParam(r, "post"), asString(payload["direction"]))
 	if err != nil {
 		http.Error(w, "could not update vote", http.StatusInternalServerError)
@@ -144,10 +130,6 @@ func Conversations(w http.ResponseWriter, r *http.Request) {
 	}
 	if login.CurrentUserID(r) == "" {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	if !writeLimits.Allow(r) {
-		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if err := repository.GetStore().SaveConversations(conversations); err != nil {

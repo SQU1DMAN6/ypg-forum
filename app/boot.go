@@ -32,6 +32,10 @@ func BootApp() {
 	}
 
 	r := chi.NewRouter()
+	// Session middleware runs first so CurrentUserID() works in
+	// downstream handlers and template rendering. scs.LoadAndSave is
+	// already the cheapest path the library exposes; it only writes back
+	// to the disk store when the session was actually mutated.
 	ss := config.GetSessionManager()
 	r.Use(ss.LoadAndSave)
 	r.Use(PanicRecoveryMiddleware)
@@ -46,12 +50,6 @@ func BootApp() {
 		addr = ":13300"
 	}
 
-	// All requests, including the root, must go through the chi router so
-	// that the session middleware (ss.LoadAndSave) runs and populates the
-	// request context. Earlier we short-circuited / to ServeHTMLPage before
-	// the session was loaded, which caused a panic in login.CurrentUserID
-	// ("scs: no session data in context") and returned an empty reply to
-	// the browser -- which is exactly the hang the user reported.
 	if err := http.ListenAndServe(addr, r); err != nil {
 		panic(err)
 	}

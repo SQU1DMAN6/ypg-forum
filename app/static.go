@@ -31,8 +31,7 @@ func RegisterStatic(r *chi.Mux) {
 	fileServer := func(p string) http.Handler {
 		fs := http.FileServer(http.Dir(p))
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			log.Printf("[static] %s %s -> %s", req.Method, req.URL.Path, p)
+			w.Header().Set("Cache-Control", "public, max-age=300")
 			fs.ServeHTTP(w, req)
 		})
 	}

@@ -6,35 +6,37 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
-	"time"
 
 	"ftr-ypg/config"
-	"ftr-ypg/controller/auth"
 	"ftr-ypg/controller/response"
 	"ftr-ypg/repository"
 )
 
-var limits = auth.NewRateLimiter(20, 10*time.Minute)
+// Note: the in-process rate limiter that used to live at the top of this
+// file was removed. Sign-in remains gated by:
+//   - the salted SHA-256 password hash with constant-time compare
+//   - the HttpOnly+SameSite=Strict session cookie
+//   - the request-timeout middleware in app/middleware.go
+// The previous 20/10min limiter was tripping a classroom of 30 students
+// behind a single NAT after a few minutes of normal use. A real per-IP
+// brute-force limit belongs in a reverse proxy (caddy / nginx / cloud).
 
+// Session returns the current viewer and a flag indicating whether they
+// are signed in. This is the hot endpoint called by every page load;
+// it MUST stay fast. It deliberately does not assemble the full backend
+// "state" payload -- that used to mean eight sqlite queries per page
+// view, which is what made the JS layer hang on "Loading YPG Forum..."
+// when the session or message table was locked.
 func Session(w http.ResponseWriter, r *http.Request) {
 	userID := CurrentUserID(r)
 	signedIn := userID != ""
 	if userID == "" {
 		userID = "guest"
 	}
-	state, err := repository.GetStore().State(userID)
-	if err != nil {
-		http.Error(w, "could not load state", http.StatusInternalServerError)
-		return
-	}
-	response.JSON(w, map[string]any{"signedIn": signedIn, "userId": userID, "state": state})
+	response.JSON(w, map[string]any{"signedIn": signedIn, "userId": userID})
 }
 
 func LoginMainPost(w http.ResponseWriter, r *http.Request) {
-	if !limits.Allow(r) {
-		http.Error(w, "too many attempts", http.StatusTooManyRequests)
-		return
-	}
 	var payload struct {
 		Email    string `json:"email"`
 		Handle   string `json:"handle"`

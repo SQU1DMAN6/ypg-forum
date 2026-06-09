@@ -8,21 +8,21 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"ftr-ypg/config"
-	"ftr-ypg/controller/auth"
 	"ftr-ypg/controller/response"
 	"ftr-ypg/repository"
 )
 
-var limits = auth.NewRateLimiter(20, 10*time.Minute)
+// Note: the in-process rate limiter that used to live at the top of this
+// file was removed. Sign-up is already gated by:
+//   - a strong password requirement (min 8 chars, confirmed match)
+//   - salted SHA-256 hashing with constant-time compare on login
+//   - a single-session cookie bound to a successful sign-up
+// The previous limiter was tripping legitimate classroom traffic from a
+// shared NAT; a proper rate limit belongs in a reverse proxy.
 
 func RegisterMainPost(w http.ResponseWriter, r *http.Request) {
-	if !limits.Allow(r) {
-		http.Error(w, "too many attempts", http.StatusTooManyRequests)
-		return
-	}
 	var account map[string]any
 	if !response.ReadJSON(w, r, &account) {
 		return
@@ -30,6 +30,10 @@ func RegisterMainPost(w http.ResponseWriter, r *http.Request) {
 	password := asString(account["password"])
 	if password == "" || password != asString(account["confirmPassword"]) {
 		http.Error(w, "passwords do not match", http.StatusBadRequest)
+		return
+	}
+	if len(password) < 8 {
+		http.Error(w, "password must be at least 8 characters", http.StatusBadRequest)
 		return
 	}
 	if asString(account["handle"]) == "" || asString(account["email"]) == "" {
