@@ -1,0 +1,11 @@
+{{define "page_settings"}}{{template "layout" .}}{{end}}
+{{define "content_settings"}}
+<form class="form-grid" method="post" action="/api/profile">
+  <div class="field"><label>Display name</label><input name="name" value="{{.User.name}}"></div>
+  <div class="field"><label>Handle</label><input name="handle" value="{{.User.handle}}"></div>
+  <div class="field"><label>Year/group</label><input name="year" value="{{.User.year}}"></div>
+  <div class="field"><label>Avatar initials</label><input name="initials" value="{{.User.initials}}"></div>
+  <div class="field"><label>Bio</label><textarea name="bio">{{.User.bio}}</textarea></div>
+  <button class="button primary" type="submit">Save Profile</button>
+</form>
+{{end}}

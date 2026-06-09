@@ -1,0 +1,24 @@
+{{define "page_signup"}}{{template "layout" .}}{{end}}
+{{define "content_signup"}}
+{{if .FormError}}<p class="form-error" role="alert">{{.FormError}}</p>{{end}}
+<form class="form-grid" method="post" action="/api/signup">
+  <h3>Create account</h3>
+  <div class="field"><label>Display name</label><input name="name" required></div>
+  <div class="field"><label>Handle</label><input name="handle" required></div>
+  <div class="field"><label>Email</label><input name="email" type="email" required></div>
+  <div class="field"><label>Password</label><input name="password" type="password" minlength="8"></div>
+  <div class="field"><label>Confirm password</label><input name="confirmPassword" type="password" minlength="8"></div>
+  <div class="field"><label>Year/group</label>
+    <select name="year">
+      <option>Year 9</option>
+      <option>Year 10</option>
+      <option>Year 11</option>
+      <option>Year 12</option>
+      <option>Teacher</option>
+    </select>
+  </div>
+  <div class="field"><label>Bio</label><textarea name="bio" placeholder="What kind of philosophy are you interested in?"></textarea></div>
+  <button class="button primary" type="submit">Create account</button>
+  <a class="button" href="/signin.html">I already have one</a>
+</form>
+{{end}}

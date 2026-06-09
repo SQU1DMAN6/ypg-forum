@@ -1,0 +1,12 @@
+{{define "post_card"}}
+<article class="post" tabindex="0" style="--post-color:#ececec">
+  <div class="post-inner">
+    <div class="post-head">
+      <strong>{{.authorId}}</strong>
+      <div class="post-meta"><span>{{.createdAt}}</span><span>{{.comments}} comments</span></div>
+    </div>
+    <h3><a href="/post.html?id={{.id}}">{{.title}}</a></h3>
+    <p>{{.body}}</p>
+  </div>
+</article>
+{{end}}

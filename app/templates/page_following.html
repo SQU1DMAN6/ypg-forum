@@ -1,0 +1,23 @@
+{{define "page_following"}}{{template "layout" .}}{{end}}
+{{define "content_following"}}
+<section class="feed" id="post-list" aria-label="Following feed">
+  {{if .SignedIn}}
+    <p>Posts from the people you follow. Follow or unfollow members anywhere and this feed updates.</p>
+    {{if .Posts}}
+      {{range .Posts}}
+        {{template "post_card" .}}
+      {{end}}
+    {{else}}
+    <section class="empty-state">
+      <h3>No posts from people you follow yet</h3>
+      <p><a href="/">Browse the general feed</a> and tap follow on members you like.</p>
+    </section>
+    {{end}}
+  {{else}}
+  <section class="empty-state">
+    <h3>Sign in to see your following feed</h3>
+    <p><a class="button primary" href="/signin.html">Sign In</a> <a class="button" href="/signup.html">Sign Up</a></p>
+  </section>
+  {{end}}
+</section>
+{{end}}

@@ -18,6 +18,7 @@ func RegisterMiddleWares(r *chi.Mux) {
 	r.Use(SecureHeaders)
 	r.Use(middleware.Logger)
 	r.Use(middleware.StripSlashes)
+	r.Use(VerboseRequestLogger)
 }
 
 type responseRecorder struct {
@@ -95,6 +96,39 @@ func RequestBodyLogger(next http.Handler) http.Handler {
 		if r.ContentLength > 0 {
 			log.Printf("[req] method=%s url=%s body_bytes=%d", r.Method, r.URL.String(), r.ContentLength)
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// VerboseRequestLogger emits a single human-friendly line per request that
+// includes method, path, status, size, remote address, referer, user agent,
+// and the elapsed duration. It complements the JSON-style [stats] and the
+// chi middleware.Logger lines so we can grep bin/server.out.log for [reqv]
+// to see a quick timeline of what a curl/browser hit.
+func VerboseRequestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(ww, r)
+		elapsed := time.Since(start)
+		log.Printf("[reqv] method=%s path=%s status=%d bytes=%d elapsed=%s remote=%s referer=%q ua=%q", r.Method, r.URL.Path, ww.status, ww.written, elapsed.String(), r.RemoteAddr, r.Referer(), r.UserAgent())
+	})
+}
+
+// PanicRecoveryMiddleware converts any panic inside a handler into a 500
+// response and logs the stack. Without this, a panic inside ServeHTMLPage
+// or one of the controllers would tear the request down with a closed
+// connection and the browser would never see a useful error.
+func PanicRecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("[panic] method=%s path=%s reason=%v", r.Method, r.URL.Path, rec)
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte("internal server error - see bin/server.err.log for details"))
+			}
+		}()
 		next.ServeHTTP(w, r)
 	})
 }

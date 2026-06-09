@@ -14,27 +14,79 @@
     if (window.__YPG_RUNTIME_DEBUG_ATTACHED__) return;
     window.__YPG_RUNTIME_DEBUG_ATTACHED__ = true;
 
+    // Capture <script> tag load errors. When an extension like an ad blocker
+    // blocks a third-party script, the browser fires an "error" event on the
+    // <script> element with a synthetic "Script error." message. The element
+    // carries the original src so we can log it and surface it on the
+    // visible debug panel.
     window.addEventListener("error", (event) => {
       const target = event.target;
       if (target && target !== window && (target.src || target.href)) {
-        console.warn(runtimePrefix, "resource failed to load", {
+        const entry = {
+          kind: "resource",
           tag: target.tagName,
           url: target.src || target.href,
           page: window.location.pathname
-        });
+        };
+        console.warn(runtimePrefix, "resource failed to load", entry);
+        showDebugPanel();
+        appendDebug("resource-error", entry);
         return;
       }
-      console.error(runtimePrefix, "uncaught error:", event.error || event.message, {
+      const entry = {
+        kind: "error",
+        message: event.message,
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
         stack: event.error?.stack
-      });
+      };
+      console.error(runtimePrefix, "uncaught error:", event.error || event.message, entry);
+      showDebugPanel();
+      appendDebug("uncaught", entry);
     }, true);
 
     window.addEventListener("unhandledrejection", (event) => {
+      const entry = { kind: "rejection", reason: String(event.reason?.message || event.reason || "unknown") };
       console.error(runtimePrefix, "unhandled promise rejection:", event.reason);
+      showDebugPanel();
+      appendDebug("rejection", entry);
     });
+  }
+
+  function debugPanelEnabled() {
+    // Show the panel if the body has data-debug="1" (set by SSR when the
+    // visitor appends ?debug=1 to any URL) or when the URL carries the
+    // flag directly. We default to hidden to keep the regular user
+    // experience clean.
+    if (typeof document === "undefined") return false;
+    const body = document.body;
+    if (body && body.dataset && body.dataset.debug === "1") return true;
+    try {
+      const search = new URLSearchParams(window.location.search || "");
+      return search.get("debug") === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function showDebugPanel() {
+    if (!debugPanelEnabled()) return;
+    const panel = document.getElementById("ypg-debug-panel");
+    if (panel) panel.hidden = false;
+    const pre = document.getElementById("ypg-runtime-debug");
+    if (pre && pre.textContent.trim() === "") {
+      pre.textContent = "[YPG runtime attached at " + new Date().toISOString() + "]";
+    }
+  }
+
+  function appendDebug(kind, entry) {
+    if (!debugPanelEnabled()) return;
+    const pre = document.getElementById("ypg-runtime-debug");
+    if (!pre) return;
+    const stamp = new Date().toISOString();
+    const line = "[" + stamp + "] " + kind + " " + JSON.stringify(entry, null, 2) + "\n";
+    pre.textContent = (pre.textContent || "") + line;
   }
 
   function showBlockedHint() {

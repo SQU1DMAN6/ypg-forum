@@ -1,0 +1,12 @@
+{{define "right_sidebar"}}
+<aside class="right">
+  <div class="right-title">Topics</div>
+  <ul class="topic-list-noscript">
+    {{range .Topics}}
+    <li><a href="/{{.id}}.html" style="--topic-color:{{.color}}">{{.label}}</a></li>
+    {{end}}
+  </ul>
+  <div class="right-title second">Direct Messages</div>
+  <p class="quiet"><a href="/messages.html">Open messages</a> to chat with other members.</p>
+</aside>
+{{end}}

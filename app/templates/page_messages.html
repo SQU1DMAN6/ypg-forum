@@ -1,0 +1,8 @@
+{{define "page_messages"}}{{template "layout" .}}{{end}}
+{{define "content_messages"}}
+<section class="empty-state">
+  <h3>Direct Messages</h3>
+  <p>Open a conversation from the right sidebar, or visit <a href="/messages.html">messages</a>.</p>
+  {{if not .SignedIn}}<p><a class="button primary" href="/signin.html">Sign In</a> to use direct messages.</p>{{end}}
+</section>
+{{end}}

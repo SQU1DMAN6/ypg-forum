@@ -1,0 +1,19 @@
+{{define "page_profile"}}{{template "layout" .}}{{end}}
+{{define "content_profile"}}
+<section class="profile-hero">
+  <h2>{{.User.name}}</h2>
+  <p class="quiet">@{{.User.handle}} &middot; {{.User.year}}</p>
+  <p>{{.User.bio}}</p>
+  <p><a class="button" href="/settings.html">Edit Profile</a> <a class="button" href="/account.html">Account</a></p>
+</section>
+<section class="section-heading"><h3>Your posts</h3></section>
+<section class="feed">
+  {{if .Posts}}
+    {{range .Posts}}
+      {{template "post_card" .}}
+    {{end}}
+  {{else}}
+  <p class="quiet">No posts yet. <a href="/create-post.html">Create your first discussion</a>.</p>
+  {{end}}
+</section>
+{{end}}

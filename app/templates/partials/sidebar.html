@@ -1,0 +1,17 @@
+{{define "sidebar"}}
+<aside class="left">
+  <div class="brand">
+    <a class="logo" href="/" aria-label="Young Philosophers home"></a>
+    <div class="brand-copy"><h1>MHS YPG</h1></div>
+  </div>
+  <nav class="sidebar-card" aria-label="Forum sections">
+    <div class="topic-list">
+      <a class="topic all{{if eq .Page "page_home"}} active{{end}}" href="/"><span class="dot"></span>General (All)</a>
+      {{range .Topics}}
+      <a class="topic{{if and (eq $.Page "page_topic") (eq .id $.TopicID)}} active{{end}}" href="/{{.id}}.html" style="--topic-color:{{.color}}"><span class="dot"></span>{{.label}}</a>
+      {{end}}
+      <a class="topic all{{if eq .Page "page_following"}} active{{end}}" href="/following.html"><span class="dot"></span>Following Feed</a>
+    </div>
+  </nav>
+</aside>
+{{end}}

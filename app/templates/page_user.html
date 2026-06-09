@@ -1,0 +1,18 @@
+{{define "page_user"}}{{template "layout" .}}{{end}}
+{{define "content_user"}}
+<section class="profile-hero">
+  <h2>{{.User.name}}</h2>
+  <p class="quiet">@{{.User.handle}} &middot; {{.User.year}}</p>
+  <p>{{.User.bio}}</p>
+</section>
+<section class="section-heading"><h3>Posts</h3></section>
+<section class="feed">
+  {{if .Posts}}
+    {{range .Posts}}
+      {{template "post_card" .}}
+    {{end}}
+  {{else}}
+  <p class="quiet">No posts yet.</p>
+  {{end}}
+</section>
+{{end}}

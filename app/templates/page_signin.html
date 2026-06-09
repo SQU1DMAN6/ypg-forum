@@ -1,0 +1,12 @@
+{{define "page_signin"}}{{template "layout" .}}{{end}}
+{{define "content_signin"}}
+{{if .FormError}}<p class="form-error" role="alert">{{.FormError}}</p>{{end}}
+<form class="form-grid" method="post" action="/api/login">
+  <h3>Welcome back</h3>
+  <p>Sign in to post, follow, vote, and open direct messages.</p>
+  <div class="field"><label>Email or handle</label><input name="identifier" type="text" required></div>
+  <div class="field"><label>Password</label><input name="password" type="password"></div>
+  <button class="button primary" type="submit">Sign in</button>
+  <a class="button" href="/signup.html">Create account</a>
+</form>
+{{end}}

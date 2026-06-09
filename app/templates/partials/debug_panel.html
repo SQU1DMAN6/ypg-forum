@@ -1,0 +1,9 @@
+{{define "debug_panel"}}
+<section class="ypg-debug-panel" id="ypg-debug-panel" hidden>
+  <h2>YPG diagnostics</h2>
+  <p>Generated: <code>{{.Generated}}</code></p>
+  <p>Page: <code>{{.Page}}</code> Topic: <code>{{.TopicID}}</code></p>
+  {{if .Debug}}<pre class="debug-message">{{.Debug}}</pre>{{end}}
+  <pre id="ypg-runtime-debug"></pre>
+</section>
+{{end}}

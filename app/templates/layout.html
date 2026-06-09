@@ -1,0 +1,47 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<meta name="x-ypg-page" content="{{.Page}}">
+<meta name="x-ypg-generated" content="{{.Generated}}">
+<link rel="stylesheet" href="/assets/css/styles.css">
+<script src="/assets/js/data.js" defer></script>
+<script src="/assets/js/api.js" defer></script>
+<script src="/assets/js/storage.js" defer></script>
+<script src="/assets/js/render.js" defer></script>
+<script src="/assets/js/app.js" defer></script>
+</head>
+<body data-page="{{.Page}}" data-topic="{{.TopicID}}" data-generated="{{.Generated}}" data-signed-in="{{.SignedInState}}" data-debug="{{.DebugFlag}}">
+<div id="app">
+  <div class="app">
+    {{template "sidebar" .}}
+    <main class="main">
+      {{template "topbar" .}}
+      <header class="page-header">
+        <h1>{{.Title}}</h1>
+        {{if .Description}}<p class="page-description">{{.Description}}</p>{{end}}
+      </header>
+      <div id="page-content">
+{{if eq .Page "page_home"}}{{template "content_home" .}}{{end}}
+{{if eq .Page "page_topic"}}{{template "content_topic" .}}{{end}}
+{{if eq .Page "page_post"}}{{template "content_post" .}}{{end}}
+{{if eq .Page "page_following"}}{{template "content_following" .}}{{end}}
+{{if eq .Page "page_profile"}}{{template "content_profile" .}}{{end}}
+{{if eq .Page "page_settings"}}{{template "content_settings" .}}{{end}}
+{{if eq .Page "page_account"}}{{template "content_account" .}}{{end}}
+{{if eq .Page "page_messages"}}{{template "content_messages" .}}{{end}}
+{{if eq .Page "page_signin"}}{{template "content_signin" .}}{{end}}
+{{if eq .Page "page_signup"}}{{template "content_signup" .}}{{end}}
+{{if eq .Page "page_create_post"}}{{template "content_create_post" .}}{{end}}
+{{if eq .Page "page_user"}}{{template "content_user" .}}{{end}}
+      </div>
+    </main>
+    {{template "right_sidebar" .}}
+  </div>
+  {{template "debug_panel" .}}
+</div>
+</body>
+</html>{{end}}

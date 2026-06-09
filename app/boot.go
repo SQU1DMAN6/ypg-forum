@@ -34,6 +34,7 @@ func BootApp() {
 	r := chi.NewRouter()
 	ss := config.GetSessionManager()
 	r.Use(ss.LoadAndSave)
+	r.Use(PanicRecoveryMiddleware)
 	RegisterMiddleWares(r)
 	RegisterStatic(r)
 	routes.RegisterRoutes(r)
@@ -44,15 +45,14 @@ func BootApp() {
 	if addr == "" {
 		addr = ":13300"
 	}
-	top := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/" {
-			ServeHTMLPage(w, req)
-			return
-		}
-		r.ServeHTTP(w, req)
-	})
 
-	if err := http.ListenAndServe(addr, top); err != nil {
+	// All requests, including the root, must go through the chi router so
+	// that the session middleware (ss.LoadAndSave) runs and populates the
+	// request context. Earlier we short-circuited / to ServeHTMLPage before
+	// the session was loaded, which caused a panic in login.CurrentUserID
+	// ("scs: no session data in context") and returned an empty reply to
+	// the browser -- which is exactly the hang the user reported.
+	if err := http.ListenAndServe(addr, r); err != nil {
 		panic(err)
 	}
 }

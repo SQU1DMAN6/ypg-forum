@@ -1,0 +1,40 @@
+{{define "page_post"}}{{template "layout" .}}{{end}}
+{{define "content_post"}}
+<section class="post-detail">
+  {{if .Post}}
+    <h2>{{.Post.title}}</h2>
+    <p class="quiet">by <strong>{{.Post.authorId}}</strong> &middot; {{.Post.createdAt}}</p>
+    <p>{{.Post.body}}</p>
+  {{else}}
+    <section class="empty-state">
+      <h3>Post not found</h3>
+      <p>This discussion could not be found. <a href="/">Return to the feed</a>.</p>
+    </section>
+  {{end}}
+</section>
+{{if .Post}}
+<section class="comments-panel">
+  <h3>Comments</h3>
+  {{if .Comments}}
+    {{range .Comments}}
+    <article class="comment-card">
+      <p><strong>{{.authorId}}</strong> &middot; <span class="quiet">{{.createdAt}}</span></p>
+      <p>{{.body}}</p>
+    </article>
+    {{end}}
+  {{else}}
+    <p class="quiet">No comments yet. Be the first to reply.</p>
+  {{end}}
+  {{if .SignedIn}}
+  <form class="comment-form" method="post" action="/api/comments">
+    <input type="hidden" name="postId" value="{{.Post.id}}">
+    <label for="comment-body" class="quiet">Add a comment</label>
+    <textarea id="comment-body" name="body" placeholder="Write a reply"></textarea>
+    <button class="button primary" type="submit">Post Comment</button>
+  </form>
+  {{else}}
+  <p><a class="button" href="/signin.html">Sign in to comment</a></p>
+  {{end}}
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,16 @@
+{{define "page_account"}}{{template "layout" .}}{{end}}
+{{define "content_account"}}
+<section class="settings-grid">
+  <article class="settings-panel">
+    <h3>Account actions</h3>
+    <form method="post" action="/api/logout">
+      <button class="button danger" type="submit">Log Out</button>
+    </form>
+  </article>
+  <article class="settings-panel">
+    <h3>Backend auth</h3>
+    <p>The site uses an FtR-run YPG backend session.</p>
+    <a class="button" href="/signin.html">Sign In Page</a> <a class="button" href="/signup.html">Sign Up Page</a>
+  </article>
+</section>
+{{end}}

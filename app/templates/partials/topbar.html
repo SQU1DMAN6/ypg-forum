@@ -1,0 +1,21 @@
+{{define "topbar"}}
+<div class="topbar">
+  {{if .SignedIn}}
+  <a class="create-post" href="/create-post.html">+ Create Post</a>
+  {{else}}
+  <a class="create-post" href="/signin.html">Sign in to post</a>
+  {{end}}
+  <form class="search" role="search" data-search-form action="/" method="get">
+    <input type="search" name="q" data-search-input placeholder="Search discussions, authors, arguments...">
+    <button class="clear-search" type="reset" data-clear-search aria-label="Clear search">x</button>
+  </form>
+  {{if .SignedIn}}
+  <a class="profile" href="/profile.html" aria-label="Profile and settings">@{{.User.handle}}</a>
+  {{else}}
+  <div class="auth-actions">
+    <a class="button compact" href="/signin.html">Sign In</a>
+    <a class="button compact primary" href="/signup.html">Sign Up</a>
+  </div>
+  {{end}}
+</div>
+{{end}}

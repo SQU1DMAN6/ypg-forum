@@ -1,0 +1,23 @@
+{{define "page_topic"}}{{template "layout" .}}{{end}}
+{{define "content_topic"}}
+<section class="filter-panel">
+  <h3>Topic: {{.TopicID}}</h3>
+  <div class="chip-row">
+    {{range .Topics}}
+    <a class="chip{{if eq .id $.TopicID}} active{{end}}" href="/{{.id}}.html" style="--tag-color:{{.color}}">{{.label}}</a>
+    {{end}}
+  </div>
+</section>
+<section class="feed" id="post-list" aria-label="Forum posts">
+  {{if .Posts}}
+    {{range .Posts}}
+      {{template "post_card" .}}
+    {{end}}
+  {{else}}
+  <section class="empty-state">
+    <h3>No posts in this topic yet</h3>
+    <p>Try another topic, or <a href="/create-post.html">start a discussion</a> in {{.TopicID}}.</p>
+  </section>
+  {{end}}
+</section>
+{{end}}

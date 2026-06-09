@@ -94,7 +94,12 @@
   }
 
   function isSignedIn() {
-    return auth().signedIn !== false;
+    // The previous expression `auth().signedIn !== false` was a bug:
+    // a missing/undefined `signedIn` key would coerce to `true` because
+    // `undefined !== false`. That made every guest browser think they
+    // were logged in and skipped the demo sign-in flow entirely. The
+    // strict `=== true` keeps the default (not signed in) explicit.
+    return auth().signedIn === true;
   }
 
   function isBackendAvailable() {
