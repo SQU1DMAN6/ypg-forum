@@ -34,9 +34,6 @@
     } else {
       requestInit.headers = { ...jsonHeaders, ...(options.headers || {}) };
     }
-    // Attach an abort signal with a per-request timeout unless the caller
-    // already provided one. This stops "Loading YPG Forum…" from hanging
-    // forever when the backend is slow or unreachable.
     if (!requestInit.signal) {
       const controller = withTimeout(DEFAULT_TIMEOUT_MS);
       if (controller) requestInit.signal = controller.signal;
@@ -93,6 +90,10 @@
     return request(path, { method: "PUT", body: JSON.stringify(body) });
   }
 
+  function del(path) {
+    return request(path, { method: "DELETE" });
+  }
+
   window.YPGApi = {
     async session() {
       return request("/api/session");
@@ -117,6 +118,12 @@
     },
     toggleVote(postId, direction) {
       return post(`/api/votes/${encodeURIComponent(postId)}`, { direction });
+    },
+    deletePost(postId) {
+      return del(`/api/posts/${encodeURIComponent(postId)}`);
+    },
+    deleteComment(commentId) {
+      return del(`/api/comments/${encodeURIComponent(commentId)}`);
     },
     saveProfile(profile) {
       return put("/api/profile", profile);

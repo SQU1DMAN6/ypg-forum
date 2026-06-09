@@ -727,21 +727,58 @@
 
   function bindInteractive() {
     document.querySelectorAll("[data-follow-user]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
       button.addEventListener("click", (event) => {
         event.stopPropagation();
+        if (!store.isSignedIn()) {
+          window.location.href = "signin.html";
+          return;
+        }
         store.toggleFollow(button.dataset.followUser);
-        refreshCurrentPage();
+        // Update the button label inline to keep the user on the same
+        // page; a full refresh is wasteful for a single toggle.
+        const isFollowing = store.isFollowing(button.dataset.followUser);
+        button.textContent = isFollowing ? "Following" : "Follow";
+        button.classList.toggle("following", isFollowing);
       });
     });
     document.querySelectorAll("[data-vote]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
       button.addEventListener("click", (event) => {
         event.stopPropagation();
+        if (!store.isSignedIn()) {
+          window.location.href = "signin.html";
+          return;
+        }
         const postId = button.dataset.postId;
-        store.toggleVote(postId, button.dataset.vote);
-        refreshCurrentPage();
+        const direction = button.dataset.vote;
+        store.toggleVote(postId, direction);
+        // Re-render the score inline so the user sees the new value
+        // without a full page reload.
+        const post = store.postById(postId);
+        if (post) {
+          const score = store.scoreFor(post);
+          const scoreEl = document.querySelector(`[data-score-for="${CSS.escape(postId)}"]`);
+          if (scoreEl) scoreEl.textContent = String(score);
+          // Highlight whichever arrow the user just picked.
+          const card = button.closest("article.post, article.post-detail");
+          if (card) {
+            card.querySelectorAll(".vote-btn").forEach((b) => {
+              b.classList.remove("active", "down");
+            });
+            if (store.voteFor(postId) === direction) {
+              button.classList.add("active");
+              if (direction === "down") button.classList.add("down");
+            }
+          }
+        }
       });
     });
     document.querySelectorAll("article.post[data-post-link]").forEach((article) => {
+      if (article.dataset.bound === "1") return;
+      article.dataset.bound = "1";
       article.addEventListener("click", (event) => {
         if (event.target.closest("button, a, input, textarea, select")) return;
         const href = article.dataset.postLink;
@@ -754,6 +791,309 @@
         const href = article.dataset.postLink;
         if (href) window.location.href = href;
       });
+    });
+    // Per-row Delete affordances. The button is only rendered server-side
+    // when the current user owns the row, so we just confirm + call the
+    // API + reload. We could optimistically remove the element from the
+    // DOM but a full reload is simpler and avoids drift with the SSR
+    // cache.
+    document.querySelectorAll("[data-delete-post]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!confirm("Delete this post? This cannot be undone.")) return;
+        const original = button.textContent;
+        button.disabled = true;
+        button.textContent = "Deleting...";
+        try {
+          await window.YPGApi.deletePost(button.dataset.deletePost);
+          // If we're on the post page, send the user back to the feed.
+          if (window.location.pathname.endsWith("post.html")) {
+            window.location.href = "/";
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          button.disabled = false;
+          button.textContent = original;
+          alert(`Could not delete post: ${err.message || err}`);
+        }
+      });
+    });
+    document.querySelectorAll("[data-delete-comment]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!confirm("Delete this comment?")) return;
+        const original = button.textContent;
+        button.disabled = true;
+        button.textContent = "Deleting...";
+        try {
+          await window.YPGApi.deleteComment(button.dataset.deleteComment);
+          window.location.reload();
+        } catch (err) {
+          button.disabled = false;
+          button.textContent = original;
+          alert(`Could not delete comment: ${err.message || err}`);
+        }
+      });
+    });
+    // Topic-filter chips. The SSR template emits them as buttons with
+    // data-filter-topic, and clicking a chip should add/remove the topic
+    // from the active filter and re-render the visible feed. We do this
+    // client-side so it doesn't round-trip the server for every click.
+    const filterContainer = document.querySelector("[data-topic-filters]");
+    if (filterContainer && !filterContainer.dataset.bound) {
+      filterContainer.dataset.bound = "1";
+      const active = new Set();
+      const searchInput = document.querySelector("[data-search-input]");
+      filterContainer.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-filter-topic]");
+        if (!button) return;
+        const topic = button.dataset.filterTopic;
+        if (active.has(topic)) {
+          active.delete(topic);
+          button.classList.remove("active");
+        } else {
+          active.add(topic);
+          button.classList.add("active");
+        }
+        applyClientFilters(active, searchInput);
+      });
+      if (searchInput && !searchInput.dataset.bound) {
+        searchInput.dataset.bound = "1";
+        searchInput.addEventListener("input", () => applyClientFilters(active, searchInput));
+      }
+      const clear = document.querySelector("[data-clear-search]");
+      if (clear && !clear.dataset.bound) {
+        clear.dataset.bound = "1";
+        clear.addEventListener("click", () => {
+          searchInput.value = "";
+          applyClientFilters(active, searchInput);
+          searchInput.focus();
+        });
+      }
+    }
+    // Form bindings. The Go templates emit these as <form data-...>
+    // elements; we attach submit handlers and call the same YPGApi
+    // helpers the JS-only render path uses.
+    bindSigninForm();
+    bindSignupForm();
+    bindCreatePostForm();
+    bindProfileForm();
+    bindCommentFormFromSSR();
+  }
+
+  function applyClientFilters(activeTopics, searchInput) {
+    const list = document.getElementById("post-list");
+    if (!list) return;
+    const searchValue = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    let visible = 0;
+    list.querySelectorAll("article.post").forEach((article) => {
+      const id = article.dataset.postId;
+      const post = store.postById(id);
+      if (!post) {
+        article.hidden = true;
+        return;
+      }
+      const matchesTopic = activeTopics.size === 0 || post.topicIds.some((t) => activeTopics.has(t));
+      const matchesSearch = !searchValue || `${post.title} ${post.body} ${post.authorId}`.toLowerCase().includes(searchValue);
+      const visible_ = matchesTopic && matchesSearch;
+      article.hidden = !visible_;
+      if (visible_) visible++;
+    });
+    // If everything is hidden, surface a quiet "no results" line so the
+    // user knows the filter is doing something.
+    let empty = list.querySelector("[data-empty-filter-state]");
+    if (visible === 0) {
+      if (!empty) {
+        empty = document.createElement("section");
+        empty.className = "empty-state";
+        empty.dataset.emptyFilterState = "1";
+        empty.innerHTML = "<h3>No posts match your filters</h3><p>Tap a topic chip again to clear it, or clear the search box.</p>";
+        list.appendChild(empty);
+      }
+    } else if (empty) {
+      empty.remove();
+    }
+  }
+
+  function bindSigninForm() {
+    const form = document.querySelector("[data-signin-form]");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      const errorEl = document.getElementById("signin-error");
+      if (errorEl) errorEl.textContent = "";
+      submit.disabled = true;
+      const oldText = submit.textContent;
+      submit.textContent = "Signing in...";
+      try {
+        const fields = form.elements;
+        await store.loginDemo({
+          handle: fields.identifier.value.trim().replace(/^@/, ""),
+          email: fields.identifier.value.trim(),
+          password: fields.password.value
+        });
+        window.location.href = "/";
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = oldText;
+        if (errorEl) errorEl.textContent = "Could not sign in with those credentials.";
+      }
+    });
+  }
+
+  function bindSignupForm() {
+    const form = document.querySelector("[data-signup-form]");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      const errorEl = document.getElementById("signup-error");
+      if (errorEl) errorEl.textContent = "";
+      const fields = form.elements;
+      if (fields.password.value !== fields.confirmPassword.value) {
+        if (errorEl) errorEl.textContent = "Passwords must match.";
+        return;
+      }
+      submit.disabled = true;
+      const oldText = submit.textContent;
+      submit.textContent = "Creating...";
+      try {
+        const initials = (fields.initials.value || fields.name.value || "YP").trim().slice(0, 2).toUpperCase();
+        await store.signupLocal({
+          name: fields.name.value.trim(),
+          handle: fields.handle.value.trim().replace(/^@/, ""),
+          email: fields.email.value.trim(),
+          password: fields.password.value,
+          confirmPassword: fields.confirmPassword.value,
+          year: fields.year.value,
+          initials,
+          avatarColor: fields.avatarColor.value,
+          bio: fields.bio.value.trim()
+        });
+        window.location.href = "/profile.html";
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = oldText;
+        if (errorEl) errorEl.textContent = "Could not create that account. The handle or email may already be taken.";
+      }
+    });
+  }
+
+  function bindCreatePostForm() {
+    const form = document.querySelector("[data-create-post-form]");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    const errorEl = document.getElementById("form-error");
+    const topicInputs = [...form.querySelectorAll("input[name='topics']")];
+    topicInputs.forEach((input) => {
+      input.addEventListener("change", () => {
+        const checked = topicInputs.filter((i) => i.checked);
+        if (checked.length > 3) {
+          input.checked = false;
+          if (errorEl) errorEl.textContent = "Pick up to 3 topics only.";
+        } else if (errorEl) {
+          errorEl.textContent = "";
+        }
+      });
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      const title = form.title.value.trim();
+      const body = form.body.value.trim();
+      const topicIds = topicInputs.filter((i) => i.checked).map((i) => i.value);
+      if (!title || !body || topicIds.length === 0) {
+        if (errorEl) errorEl.textContent = "Add a title, post text, and at least one topic.";
+        return;
+      }
+      submit.disabled = true;
+      const oldText = submit.textContent;
+      submit.textContent = "Posting...";
+      try {
+        const saved = await store.addPost({
+          title, body, authorId: data.currentUserId, topicIds, score: 0, comments: 0, createdAt: "Just now"
+        });
+        window.location.href = `/post.html?id=${encodeURIComponent(saved.id)}`;
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = oldText;
+        if (errorEl) errorEl.textContent = err?.message?.includes("401")
+          ? "You need to sign in again before posting. Please refresh and sign in."
+          : `Could not save that discussion. ${err.message || "Please try again in a moment."}`;
+      }
+    });
+  }
+
+  function bindProfileForm() {
+    const form = document.querySelector("[data-profile-form]");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      const fields = form.elements;
+      submit.disabled = true;
+      try {
+        await store.saveProfile({
+          name: fields.name.value.trim() || data.currentUserId,
+          handle: fields.handle.value.trim() || data.currentUserId,
+          year: fields.year.value.trim(),
+          initials: fields.initials.value.trim().toUpperCase(),
+          avatarColor: fields.avatarColor.value,
+          bio: fields.bio.value.trim()
+        });
+        const saved = document.getElementById("profile-saved");
+        if (saved) saved.textContent = "Saved. Your profile is synced with the YPG backend.";
+      } catch (err) {
+        console.error("save profile failed", err);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
+
+  function bindCommentFormFromSSR() {
+    const form = document.querySelector("[data-comment-form]");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    const postId = form.dataset.postId;
+    const errorEl = document.getElementById("comment-error");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector("button[type='submit']");
+      if (submit.disabled) return;
+      const body = form.body.value.trim();
+      if (!body) {
+        if (errorEl) errorEl.textContent = "Write a comment before posting.";
+        return;
+      }
+      submit.disabled = true;
+      const oldText = submit.textContent;
+      submit.textContent = "Posting...";
+      try {
+        await store.addComment(postId, {
+          authorId: data.currentUserId, parentId: null, body, createdAt: "Just now"
+        });
+        window.location.reload();
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = oldText;
+        if (errorEl) errorEl.textContent = "Could not save that comment. Please try again.";
+      }
     });
   }
 

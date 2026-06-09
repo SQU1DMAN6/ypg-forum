@@ -1,10 +1,10 @@
 {{define "page_topic"}}{{template "layout" .}}{{end}}
 {{define "content_topic"}}
-<section class="filter-panel">
+<section class="filter-panel" data-topic-filters>
   <h3>Topic: {{.TopicID}}</h3>
   <div class="chip-row">
     {{range .Topics}}
-    <a class="chip{{if eq .id $.TopicID}} active{{end}}" href="/{{.id}}.html" style="--tag-color:{{.color}}">{{.label}}</a>
+    <button class="chip{{if eq .id $.TopicID}} active{{end}}" type="button" data-filter-topic="{{.id}}" style="--tag-color:{{topicColor .id}}">{{.label}}</button>
     {{end}}
   </div>
 </section>

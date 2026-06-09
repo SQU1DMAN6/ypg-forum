@@ -1,10 +1,10 @@
 {{define "page_home"}}{{template "layout" .}}{{end}}
 {{define "content_home"}}
-<section class="filter-panel">
+<section class="filter-panel" data-topic-filters>
   <h3>Filter by topics</h3>
   <div class="chip-row">
     {{range .Topics}}
-    <a class="chip" href="/{{.id}}.html" style="--tag-color:{{.color}}">{{.label}}</a>
+    <button class="chip" type="button" data-filter-topic="{{.id}}" style="--tag-color:{{topicColor .id}}">{{.label}}</button>
     {{end}}
   </div>
 </section>

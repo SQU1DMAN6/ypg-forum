@@ -63,6 +63,19 @@ type pageData struct {
 	// YPG diagnostics panel without a second request. Empty string keeps
 	// it hidden by default.
 	DebugFlag string
+	// IsAuthor is set on the page_post / page_user template when the
+	// current session user owns the resource. The template uses it to
+	// render the Delete button; the Delete handler also re-checks
+	// ownership server-side, so this flag only affects UI, not auth.
+	IsAuthor bool
+	// ProfilePosts are the posts authored by the current session user
+	// on the profile page. The page template renders a Delete button on
+	// each card directly.
+	ProfilePosts []map[string]any
+	// UserPosts are the posts authored by the user being viewed on the
+	// user profile page. Used so the template can render the right
+	// markup on first paint.
+	UserPosts []map[string]any
 }
 
 // newBaseTemplate loads the layout, partials, and every page template from
@@ -93,6 +106,29 @@ func newBaseTemplate() (*template.Template, error) {
 				return ""
 			}
 			return strings.ToUpper(s[:1]) + s[1:]
+		},
+		"topicColor": func(id any) string {
+			if s, ok := id.(string); ok {
+				switch s {
+				case "metaphysics":
+					return "#f7d5d8"
+				case "ethics":
+					return "#d9f5cf"
+				case "logic":
+					return "#faf5cf"
+				case "aesthetics":
+					return "#d7ebff"
+				case "epistemology":
+					return "#ffe2bd"
+				case "politics":
+					return "#d8dcff"
+				case "mind":
+					return "#d7f6ef"
+				case "religion":
+					return "#eadcff"
+				}
+			}
+			return "#ececec"
 		},
 	}
 	dir := templateDir()
@@ -256,6 +292,9 @@ func populatePageData(r *http.Request, data *pageData, pageKey, topicFilter, pos
 		for _, p := range posts {
 			if asString(p["id"]) == postID {
 				data.Post = p
+				if uid != "" && asString(p["authorId"]) == uid {
+					data.IsAuthor = true
+				}
 				break
 			}
 		}
@@ -283,6 +322,23 @@ func populatePageData(r *http.Request, data *pageData, pageKey, topicFilter, pos
 				data.User = u
 				break
 			}
+		}
+		// Mark authorship for the Delete-button render, and pre-compute
+		// the posts this user has authored so the template doesn't need
+		// a second JS round-trip to display them.
+		if uid != "" && userID == uid {
+			data.IsAuthor = true
+		}
+		authored := make([]map[string]any, 0, len(posts))
+		for _, p := range posts {
+			if asString(p["authorId"]) == userID {
+				authored = append(authored, p)
+			}
+		}
+		if pageKey == "page_profile" {
+			data.ProfilePosts = authored
+		} else {
+			data.UserPosts = authored
 		}
 	}
 

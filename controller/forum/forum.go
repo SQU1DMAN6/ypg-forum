@@ -1,6 +1,8 @@
 package forum
 
 import (
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -144,4 +146,58 @@ func asString(value any) string {
 		return text
 	}
 	return ""
+}
+
+// DeletePost removes a post (and its comments) authored by the current
+// session user. Returns 401 when not signed in, 404 when the post is
+// missing or the caller is not the author. The response is a small JSON
+// payload so the JS layer can update the page without a full reload.
+func DeletePost(w http.ResponseWriter, r *http.Request) {
+	userID := login.CurrentUserID(r)
+	if userID == "" {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	postID := chi.URLParam(r, "id")
+	if postID == "" {
+		http.Error(w, "post id is required", http.StatusBadRequest)
+		return
+	}
+	err := repository.GetStore().DeletePost(userID, postID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "post not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("delete post failed for user=%s post=%s: %v", userID, postID, err)
+		http.Error(w, "could not delete post", http.StatusInternalServerError)
+		return
+	}
+	response.JSON(w, map[string]any{"deleted": true, "id": postID})
+}
+
+// DeleteComment removes a single comment authored by the current session
+// user. Same auth pattern as DeletePost.
+func DeleteComment(w http.ResponseWriter, r *http.Request) {
+	userID := login.CurrentUserID(r)
+	if userID == "" {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	commentID := chi.URLParam(r, "id")
+	if commentID == "" {
+		http.Error(w, "comment id is required", http.StatusBadRequest)
+		return
+	}
+	err := repository.GetStore().DeleteComment(userID, commentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "comment not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("delete comment failed for user=%s comment=%s: %v", userID, commentID, err)
+		http.Error(w, "could not delete comment", http.StatusInternalServerError)
+		return
+	}
+	response.JSON(w, map[string]any{"deleted": true, "id": commentID})
 }

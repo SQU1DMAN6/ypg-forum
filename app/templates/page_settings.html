@@ -1,11 +1,16 @@
 {{define "page_settings"}}{{template "layout" .}}{{end}}
 {{define "content_settings"}}
-<form class="form-grid" method="post" action="/api/profile">
-  <div class="field"><label>Display name</label><input name="name" value="{{.User.name}}"></div>
-  <div class="field"><label>Handle</label><input name="handle" value="{{.User.handle}}"></div>
-  <div class="field"><label>Year/group</label><input name="year" value="{{.User.year}}"></div>
-  <div class="field"><label>Avatar initials</label><input name="initials" value="{{.User.initials}}"></div>
-  <div class="field"><label>Bio</label><textarea name="bio">{{.User.bio}}</textarea></div>
-  <button class="button primary" type="submit">Save Profile</button>
+<form class="form-grid" id="profile-form" data-profile-form>
+  <h3>Profile</h3>
+  <div class="field"><label for="profile-name">Display name</label><input id="profile-name" name="name" value="{{.User.name}}"></div>
+  <div class="field"><label for="profile-handle">Handle</label><input id="profile-handle" name="handle" value="{{.User.handle}}"></div>
+  <div class="field"><label for="profile-year">Year/group</label><input id="profile-year" name="year" value="{{.User.year}}"></div>
+  <div class="field"><label for="profile-initials">Avatar initials</label><input id="profile-initials" name="initials" maxlength="3" value="{{.User.initials}}"></div>
+  <div class="field"><label for="profile-color">Avatar color</label><input id="profile-color" name="avatarColor" type="color" value="{{.User.avatarColor}}"></div>
+  <div class="field"><label for="profile-bio">Bio</label><textarea id="profile-bio" name="bio">{{.User.bio}}</textarea></div>
+  <p class="success-note" id="profile-saved" aria-live="polite"></p>
+  <div class="form-actions">
+    <button class="button primary" type="submit">Save Profile</button>
+  </div>
 </form>
 {{end}}

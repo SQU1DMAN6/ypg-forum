@@ -1,12 +1,49 @@
 {{define "post_card"}}
-<article class="post" tabindex="0" style="--post-color:#ececec">
+{{$post := .}}
+{{$authorID := $post.authorId}}
+{{$currentID := $.User.id}}
+{{$isOwn := and (ne $currentID "guest") (eq $authorID $currentID)}}
+{{$postColor := topicColor (index $post.topicIds 0)}}
+<article class="post" tabindex="0"
+  style="--post-color:{{$postColor}}"
+  data-post-id="{{$post.id}}"
+  data-post-link="/post.html?id={{$post.id}}"
+  data-author-id="{{$authorID}}">
   <div class="post-inner">
     <div class="post-head">
-      <strong>{{.authorId}}</strong>
-      <div class="post-meta"><span>{{.createdAt}}</span><span>{{.comments}} comments</span></div>
+      <a class="user-link" href="/user.html?id={{$authorID}}">
+        <span class="avatar small" style="--avatar-color:#27304f">{{$authorID}}</span>
+        <span><strong>{{$authorID}}</strong></span>
+      </a>
+      {{if not $isOwn}}
+        {{if $.SignedIn}}
+        <button class="follow" type="button" data-follow-user="{{$authorID}}">Follow</button>
+        {{end}}
+      {{end}}
+      <div class="post-meta">
+        <span>{{$post.createdAt}}</span>
+        <span>{{$post.comments}} comments</span>
+      </div>
     </div>
-    <h3><a href="/post.html?id={{.id}}">{{.title}}</a></h3>
-    <p>{{.body}}</p>
+    <div class="post-content">
+      <div class="tag-row">
+        {{range $post.topicIds}}
+        <a class="tag" href="/{{.}}.html" style="--tag-color:{{topicColor .}}">{{.}}</a>
+        {{end}}
+      </div>
+      <h3><a href="/post.html?id={{$post.id}}">{{$post.title}}</a></h3>
+      <p>{{$post.body}}</p>
+    </div>
+    <div class="post-footer">
+      <div class="vote">
+        <button class="vote-btn" type="button" data-vote="up" data-post-id="{{$post.id}}">&uarr;</button>
+        <span data-score-for="{{$post.id}}">{{$post.score}}</span>
+        <button class="vote-btn" type="button" data-vote="down" data-post-id="{{$post.id}}">&darr;</button>
+      </div>
+      {{if $isOwn}}
+      <button class="follow danger" type="button" data-delete-post="{{$post.id}}">Delete</button>
+      {{end}}
+    </div>
   </div>
 </article>
 {{end}}

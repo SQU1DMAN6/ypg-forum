@@ -4,8 +4,10 @@ import (
 	routes "ftr-ypg"
 	"net/http"
 	"os"
+	"time"
 
 	"ftr-ypg/config"
+	"ftr-ypg/controller/login"
 	"ftr-ypg/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -33,9 +35,7 @@ func BootApp() {
 
 	r := chi.NewRouter()
 	// Session middleware runs first so CurrentUserID() works in
-	// downstream handlers and template rendering. scs.LoadAndSave is
-	// already the cheapest path the library exposes; it only writes back
-	// to the disk store when the session was actually mutated.
+	// downstream handlers and template rendering.
 	ss := config.GetSessionManager()
 	r.Use(ss.LoadAndSave)
 	r.Use(PanicRecoveryMiddleware)
@@ -45,6 +45,19 @@ func BootApp() {
 	r.Get("/", ServeHTMLPage)
 	r.Get("/*", ServeHTMLPage)
 
+	// Per-user 5-second cooldown on the mutating API endpoints only.
+	// GETs and the HTML page routes stay unthrottled so browsing stays
+	// free. The session user id is resolved here (after LoadAndSave) and
+	// attached to the context so the middleware can use it as a key.
+	r.Group(func(api chi.Router) {
+		api.Use(callerIDMiddleware)
+		api.Use(PerUserRouteCooldown(5 * time.Second))
+		// Register the mutating endpoints on the throttled sub-router
+		// by walking the patterns registered by routes.RegisterRoutes
+		// and re-binding them. We call RegisterMutatingRoutes for that.
+		routes.RegisterMutatingRoutes(api)
+	})
+
 	addr := os.Getenv("YPG_ADDR")
 	if addr == "" {
 		addr = ":13300"
@@ -53,4 +66,14 @@ func BootApp() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		panic(err)
 	}
+}
+
+// callerIDMiddleware pulls the current session user id (if any) and
+// attaches it to the request context under a private key. The cooldown
+// middleware uses this id as its rate-limit key so two anonymous
+// browsers sharing a NAT don't accidentally throttle each other.
+func callerIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, WithCallerID(r, login.CurrentUserID(r)))
+	})
 }

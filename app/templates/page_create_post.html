@@ -1,19 +1,23 @@
 {{define "page_create_post"}}{{template "layout" .}}{{end}}
 {{define "content_create_post"}}
 {{if .SignedIn}}
-<form class="form-grid" method="post" action="/api/posts">
+<form class="form-grid" id="create-post-form" data-create-post-form>
   <h3>Create Post</h3>
-  <div class="field"><label>Title</label><input name="title" required maxlength="120"></div>
-  <div class="field"><label>Post text</label><textarea name="body" required maxlength="1000"></textarea></div>
-  <div class="field"><label>Topic</label>
-    <select name="topic">
+  <div class="field"><label for="title">Title</label><input id="title" name="title" type="text" maxlength="120" placeholder="Example: Is free will compatible with determinism?" required></div>
+  <div class="field"><label for="body">Post text</label><textarea id="body" name="body" maxlength="1000" placeholder="Write your claim, evidence, and question for discussion." required></textarea></div>
+  <div class="field">
+    <label>Topics <span class="soft-note">Choose 1 to 3</span></label>
+    <div class="chip-row selectable-topics">
       {{range .Topics}}
-      <option value="{{.id}}">{{.label}}</option>
+      <label class="chip checkbox-chip" style="--tag-color:{{topicColor .id}}"><input type="checkbox" name="topics" value="{{.id}}">{{.label}}</label>
       {{end}}
-    </select>
+    </div>
   </div>
-  <button class="button primary" type="submit">Post Discussion</button>
-  <a class="button" href="/">Cancel</a>
+  <p class="form-error" id="form-error" aria-live="polite"></p>
+  <div class="form-actions">
+    <button class="button primary" type="submit">Post Discussion</button>
+    <a class="button" href="/">Cancel</a>
+  </div>
 </form>
 {{else}}
 <section class="empty-state">

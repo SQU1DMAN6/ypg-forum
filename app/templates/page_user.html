@@ -4,11 +4,16 @@
   <h2>{{.User.name}}</h2>
   <p class="quiet">@{{.User.handle}} &middot; {{.User.year}}</p>
   <p>{{.User.bio}}</p>
+  {{if .SignedIn}}
+  <p>
+    <button class="follow" type="button" data-follow-user="{{.User.id}}">Follow</button>
+  </p>
+  {{end}}
 </section>
 <section class="section-heading"><h3>Posts</h3></section>
-<section class="feed">
-  {{if .Posts}}
-    {{range .Posts}}
+<section class="feed" id="post-list">
+  {{if .UserPosts}}
+    {{range .UserPosts}}
       {{template "post_card" .}}
     {{end}}
   {{else}}

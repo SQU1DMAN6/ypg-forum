@@ -1,12 +1,15 @@
 {{define "page_signin"}}{{template "layout" .}}{{end}}
 {{define "content_signin"}}
 {{if .FormError}}<p class="form-error" role="alert">{{.FormError}}</p>{{end}}
-<form class="form-grid" method="post" action="/api/login">
+<form class="form-grid" id="signin-form" data-signin-form>
   <h3>Welcome back</h3>
   <p>Sign in to post, follow, vote, and open direct messages.</p>
-  <div class="field"><label>Email or handle</label><input name="identifier" type="text" required></div>
-  <div class="field"><label>Password</label><input name="password" type="password"></div>
-  <button class="button primary" type="submit">Sign in</button>
-  <a class="button" href="/signup.html">Create account</a>
+  <div class="field"><label for="identifier">Email or handle</label><input id="identifier" name="identifier" type="text" placeholder="you@mhs or @you" required></div>
+  <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" placeholder="Your password"></div>
+  <p class="form-error" id="signin-error" aria-live="polite"></p>
+  <div class="form-actions">
+    <button class="button primary" type="submit" id="signin-submit">Sign in</button>
+    <a class="button" href="/signup.html">Create account</a>
+  </div>
 </form>
 {{end}}

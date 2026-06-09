@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -89,4 +92,121 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// cooldownKey is the in-process per-(caller, route) last-hit timestamp.
+// We keep it in memory; on a server restart the cooldown resets, which is
+// fine for the level of protection we're after (anti-double-click, not
+// anti-DDoS).
+type cooldownEntry struct {
+	lastHit time.Time
+}
+
+var (
+	cooldownMu   sync.Mutex
+	cooldownMap  = map[string]*cooldownEntry{}
+)
+
+// PerUserRouteCooldown returns a middleware that returns 429 Too Many
+// Requests if the same caller hit the same route+method in the last
+// `window` (default 5s). The caller is the signed-in user id when
+// available, otherwise the client IP. GETs are never throttled by this
+// middleware so browsing stays free; only the mutating endpoints wrap it.
+func PerUserRouteCooldown(window time.Duration) func(http.Handler) http.Handler {
+	if window <= 0 {
+		window = 5 * time.Second
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only throttle state-changing methods. GETs are read-only
+			// and need to be fast.
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				next.ServeHTTP(w, r)
+				return
+			}
+			caller := callerID(r)
+			if caller == "" {
+				caller = "anon:" + clientIP(r)
+			}
+			key := caller + " " + r.Method + " " + r.URL.Path
+			now := time.Now()
+			cooldownMu.Lock()
+			entry, ok := cooldownMap[key]
+			if !ok {
+				entry = &cooldownEntry{}
+				cooldownMap[key] = entry
+			}
+			if !entry.lastHit.IsZero() && now.Sub(entry.lastHit) < window {
+				retry := window - now.Sub(entry.lastHit)
+				cooldownMu.Unlock()
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retry.Seconds())+1))
+				http.Error(w, "please wait a few seconds before repeating this request", http.StatusTooManyRequests)
+				return
+			}
+			entry.lastHit = now
+			// Best-effort GC of stale entries so the map doesn't grow
+			// without bound. Cheap because the map is small (one entry
+			// per route per active caller) and the lock is held for
+			// microseconds.
+			if len(cooldownMap) > 4096 {
+				cutoff := now.Add(-window)
+				for k, e := range cooldownMap {
+					if e.lastHit.Before(cutoff) {
+						delete(cooldownMap, k)
+					}
+				}
+			}
+			cooldownMu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// callerID returns a stable identifier for the current user, preferring
+// the session user id over the IP address. Returns "" for guests.
+func callerID(r *http.Request) string {
+	if v := r.Context().Value(callerIDKey); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// WithCallerID stores the session user id on the request context so the
+// cooldown middleware can use it as a key. The id is the same value the
+// scs session exposes via GetString("userID"); we resolve it here once
+// per request and pass it down via context to avoid two lookups.
+func WithCallerID(r *http.Request, userID string) *http.Request {
+	ctx := context.WithValue(r.Context(), callerIDKey, userID)
+	return r.WithContext(ctx)
+}
+
+type ctxKey int
+
+const callerIDKey ctxKey = 1
+
+// clientIP best-effort resolves the client's address. We trust
+// X-Forwarded-For only as a last-resort hint because the deployment
+// does not put a known reverse proxy in front. The cooldown middleware
+// is the only thing that reads this, and missing precision here just
+// means a slightly looser throttle, not a security failure.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			xff = xff[:i]
+		}
+		if ip := strings.TrimSpace(xff); ip != "" {
+			return ip
+		}
+	}
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		return xri
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

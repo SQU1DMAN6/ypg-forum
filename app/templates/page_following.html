@@ -2,9 +2,9 @@
 {{define "content_following"}}
 <section class="feed" id="post-list" aria-label="Following feed">
   {{if .SignedIn}}
-    <p>Posts from the people you follow. Follow or unfollow members anywhere and this feed updates.</p>
-    {{if .Posts}}
-      {{range .Posts}}
+    <p class="quiet">Posts from the people you follow. Follow or unfollow members anywhere and this feed updates.</p>
+    {{if .FollowingPosts}}
+      {{range .FollowingPosts}}
         {{template "post_card" .}}
       {{end}}
     {{else}}

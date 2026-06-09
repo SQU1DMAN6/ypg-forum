@@ -560,3 +560,51 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// DeletePost removes a post and all of its comments. It enforces author
+// ownership: the row is only deleted if author_id matches userID. Returns
+// sql.ErrNoRows when the post is missing or the caller does not own it,
+// so the caller can map that to a 404/403.
+func (s *Store) DeletePost(userID, postID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var authorID string
+	err = tx.QueryRow(`SELECT author_id FROM posts WHERE id = ?`, postID).Scan(&authorID)
+	if err == sql.ErrNoRows {
+		return sql.ErrNoRows
+	}
+	if err != nil {
+		return err
+	}
+	if authorID != userID {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.Exec(`DELETE FROM comments WHERE post_id = ?`, postID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM posts WHERE id = ?`, postID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// DeleteComment removes a single comment authored by userID. Returns
+// sql.ErrNoRows when the comment is missing or the caller does not own it.
+func (s *Store) DeleteComment(userID, commentID string) error {
+	var authorID string
+	err := s.db.QueryRow(`SELECT author_id FROM comments WHERE id = ?`, commentID).Scan(&authorID)
+	if err == sql.ErrNoRows {
+		return sql.ErrNoRows
+	}
+	if err != nil {
+		return err
+	}
+	if authorID != userID {
+		return sql.ErrNoRows
+	}
+	_, err = s.db.Exec(`DELETE FROM comments WHERE id = ?`, commentID)
+	return err
+}

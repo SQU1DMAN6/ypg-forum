@@ -2,9 +2,40 @@
 {{define "content_post"}}
 <section class="post-detail">
   {{if .Post}}
-    <h2>{{.Post.title}}</h2>
-    <p class="quiet">by <strong>{{.Post.authorId}}</strong> &middot; {{.Post.createdAt}}</p>
-    <p>{{.Post.body}}</p>
+    {{$authorID := .Post.authorId}}
+    {{$currentID := .User.id}}
+    {{$isOwn := and (ne $currentID "guest") (eq $authorID $currentID)}}
+    <article class="post post-detail" style="--post-color:{{topicColor (index .Post.topicIds 0)}}" data-post-id="{{.Post.id}}" data-author-id="{{$authorID}}">
+      <header class="post-detail-head">
+        <a class="user-link" href="/user.html?id={{$authorID}}">
+          <span class="avatar small" style="--avatar-color:#27304f">{{$authorID}}</span>
+          <span><strong>{{$authorID}}</strong></span>
+        </a>
+        {{if not $isOwn}}
+          {{if .SignedIn}}
+          <button class="follow" type="button" data-follow-user="{{$authorID}}">Follow</button>
+          {{end}}
+        {{end}}
+        <div class="post-meta"><span>{{.Post.createdAt}}</span></div>
+      </header>
+      <div class="tag-row">
+        {{range .Post.topicIds}}
+        <a class="tag" href="/{{.}}.html" style="--tag-color:{{topicColor .}}">{{.}}</a>
+        {{end}}
+      </div>
+      <h2>{{.Post.title}}</h2>
+      <p>{{.Post.body}}</p>
+      <footer class="post-detail-footer">
+        <div class="vote">
+          <button class="vote-btn" type="button" data-vote="up" data-post-id="{{.Post.id}}">&uarr;</button>
+          <span data-score-for="{{.Post.id}}">{{.Post.score}}</span>
+          <button class="vote-btn" type="button" data-vote="down" data-post-id="{{.Post.id}}">&darr;</button>
+        </div>
+        {{if $isOwn}}
+        <button class="follow danger" type="button" data-delete-post="{{.Post.id}}">Delete this post</button>
+        {{end}}
+      </footer>
+    </article>
   {{else}}
     <section class="empty-state">
       <h3>Post not found</h3>
@@ -17,8 +48,21 @@
   <h3>Comments</h3>
   {{if .Comments}}
     {{range .Comments}}
-    <article class="comment-card">
-      <p><strong>{{.authorId}}</strong> &middot; <span class="quiet">{{.createdAt}}</span></p>
+    {{$cid := .id}}
+    {{$cauthor := .authorId}}
+    {{$ccurrent := $.User.id}}
+    {{$cisOwn := and (ne $ccurrent "guest") (eq $cauthor $ccurrent)}}
+    <article class="comment-card" id="comment-{{$cid}}" data-comment-id="{{$cid}}" data-author-id="{{$cauthor}}">
+      <header>
+        <a class="user-link" href="/user.html?id={{$cauthor}}">
+          <span class="avatar small" style="--avatar-color:#27304f">{{$cauthor}}</span>
+          <span><strong>{{$cauthor}}</strong></span>
+        </a>
+        <span class="quiet">{{.createdAt}}</span>
+        {{if $cisOwn}}
+        <button class="follow danger" type="button" data-delete-comment="{{$cid}}">Delete</button>
+        {{end}}
+      </header>
       <p>{{.body}}</p>
     </article>
     {{end}}
@@ -26,8 +70,7 @@
     <p class="quiet">No comments yet. Be the first to reply.</p>
   {{end}}
   {{if .SignedIn}}
-  <form class="comment-form" method="post" action="/api/comments">
-    <input type="hidden" name="postId" value="{{.Post.id}}">
+  <form class="comment-form" id="comment-form" data-comment-form data-post-id="{{.Post.id}}">
     <label for="comment-body" class="quiet">Add a comment</label>
     <textarea id="comment-body" name="body" placeholder="Write a reply"></textarea>
     <button class="button primary" type="submit">Post Comment</button>
